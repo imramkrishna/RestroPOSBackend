@@ -1,0 +1,194 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CASHIER
+  CHEF
+  WAITER
+}
+
+enum StaffStatus {
+  ACTIVE
+  LEAVE
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum OrderStatus {
+  PENDING
+  COOKING
+  SERVED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+  OTHER
+}
+
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  passwordHash  String         @map("password_hash")
+  role          UserRole
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  
+  profile       StaffProfile?
+  orders        Order[]
+
+  @@map("users")
+}
+
+model StaffProfile {
+  id          String       @id @default(uuid())
+  userId      String       @unique @map("user_id")
+  fullName    String       @map("full_name")
+  phone       String?
+  avatarUrl   String?      @map("avatar_url")
+  status      StaffStatus  @default(ACTIVE)
+  shiftStart  String?      @map("shift_start")
+  shiftEnd    String?      @map("shift_end")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("staff_profiles")
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  icon      String?
+  imageUrl  String?    @map("image_url")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  
+  menuItems MenuItem[]
+
+  @@map("categories")
+}
+
+model MenuItem {
+  id          String      @id @default(uuid())
+  categoryId  String      @map("category_id")
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?     @map("image_url")
+  isAvailable Boolean     @default(true) @map("is_available")
+  sizes       Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+
+  @@map("menu_items")
+}
+
+model Table {
+  id           String        @id @default(uuid())
+  tableNumber  String        @unique @map("table_number")
+  capacity     Int
+  status       TableStatus   @default(AVAILABLE)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  
+  orders       Order[]
+  reservations Reservation[]
+
+  @@map("tables")
+}
+
+model Reservation {
+  id           String            @id @default(uuid())
+  tableId      String            @map("table_id")
+  customerName String            @map("customer_name")
+  phone        String
+  guestCount   Int               @map("guest_count")
+  datetime     DateTime
+  status       ReservationStatus @default(PENDING)
+  notes        String?
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+  
+  table        Table             @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@map("reservations")
+}
+
+model Inventory {
+  id            String   @id @default(uuid())
+  itemName      String   @map("item_name")
+  category      String
+  quantity      Float
+  unit          String
+  minStockLevel Float    @map("min_stock_level")
+  costPrice     Float    @map("cost_price")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("inventory")
+}
+
+model Order {
+  id            String        @id @default(uuid())
+  tableId       String?       @map("table_id")
+  staffId       String        @map("staff_id")
+  status        OrderStatus   @default(PENDING)
+  subtotal      Float
+  tax           Float
+  total         Float
+  paymentMethod PaymentMethod?  @map("payment_method")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  
+  table         Table?        @relation(fields: [tableId], references: [id])
+  staff         User          @relation(fields: [staffId], references: [id])
+  orderItems    OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String   @map("order_id")
+  menuItemId   String   @map("menu_item_id")
+  quantity     Int
+  variant      String?
+  priceAtTime  Float    @map("price_at_time")
+  notes        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@map("order_items")
+}
