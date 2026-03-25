@@ -3,9 +3,9 @@ import app from '../src/app';
 
 describe('Order API Tests', () => {
   let adminToken: string;
+  let managerToken: string;
   let orderId: string;
   let menuItemId: string;
-  let tableId: string;
 
   beforeAll(async () => {
     const response = await request(app)
@@ -16,18 +16,55 @@ describe('Order API Tests', () => {
       });
     adminToken = response.body.data.accessToken;
 
+    const managerUsername = `order_mgr_${Date.now()}`;
+    await request(app)
+      .post('/api/v1/staff')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        username: managerUsername,
+        password: 'test123456',
+        role: 'MANAGER',
+        fullName: 'Order Test Manager',
+      })
+      .expect(201);
+
+    const managerLoginResponse = await request(app)
+      .post('/api/v1/auth/login')
+      .send({
+        username: managerUsername,
+        password: 'test123456',
+      })
+      .expect(200);
+    managerToken = managerLoginResponse.body.data.accessToken;
+
     // Get menu items
     const menuResponse = await request(app).get('/api/v1/menu');
-    if (menuResponse.body.data.length > 0 && menuResponse.body.data[0].menuItems.length > 0) {
-      menuItemId = menuResponse.body.data[0].menuItems[0].id;
-    }
+    const categories = menuResponse.body.data || [];
+    const categoryWithItems = categories.find((category: any) => Array.isArray(category.menuItems) && category.menuItems.length > 0);
 
-    // Get tables
-    const tablesResponse = await request(app)
-      .get('/api/v1/tables')
-      .set('Authorization', `Bearer ${adminToken}`);
-    if (tablesResponse.body.data.length > 0) {
-      tableId = tablesResponse.body.data[0].id;
+    if (categoryWithItems) {
+      menuItemId = categoryWithItems.menuItems[0].id;
+    } else {
+      const categoryResponse = await request(app)
+        .post('/api/v1/menu/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: `Order Test Category ${Date.now()}`,
+        })
+        .expect(201);
+
+      const itemResponse = await request(app)
+        .post('/api/v1/menu/items')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          categoryId: categoryResponse.body.data.id,
+          name: `Order Test Item ${Date.now()}`,
+          price: 9.99,
+          isAvailable: true,
+        })
+        .expect(201);
+
+      menuItemId = itemResponse.body.data.id;
     }
   });
 
@@ -37,7 +74,6 @@ describe('Order API Tests', () => {
         .post('/api/v1/orders')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          tableId,
           items: [
             {
               menuItemId,
@@ -95,7 +131,7 @@ describe('Order API Tests', () => {
     it('should get all orders', async () => {
       const response = await request(app)
         .get('/api/v1/orders')
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -105,7 +141,7 @@ describe('Order API Tests', () => {
     it('should filter orders by status', async () => {
       const response = await request(app)
         .get('/api/v1/orders?status=PENDING')
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -139,7 +175,7 @@ describe('Order API Tests', () => {
     it('should update order status', async () => {
       const response = await request(app)
         .patch(`/api/v1/orders/${orderId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .send({
           status: 'COOKING',
         })
@@ -152,7 +188,7 @@ describe('Order API Tests', () => {
     it('should fail with invalid status', async () => {
       const response = await request(app)
         .patch(`/api/v1/orders/${orderId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .send({
           status: 'INVALID_STATUS',
         })
@@ -187,7 +223,7 @@ describe('Order API Tests', () => {
     it('should process payment', async () => {
       const response = await request(app)
         .post(`/api/v1/orders/${orderId}/pay`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .send({
           paymentMethod: 'CASH',
         })
@@ -201,7 +237,7 @@ describe('Order API Tests', () => {
     it('should fail processing already completed order', async () => {
       const response = await request(app)
         .post(`/api/v1/orders/${orderId}/pay`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .send({
           paymentMethod: 'CARD',
         })

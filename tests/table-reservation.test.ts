@@ -3,6 +3,7 @@ import app from '../src/app';
 
 describe('Table & Reservation API Tests', () => {
   let adminToken: string;
+  let managerToken: string;
   let tableId: string;
   let reservationId: string;
 
@@ -14,6 +15,27 @@ describe('Table & Reservation API Tests', () => {
         password: 'admin123',
       });
     adminToken = response.body.data.accessToken;
+
+    const managerUsername = `reservation_mgr_${Date.now()}`;
+    await request(app)
+      .post('/api/v1/staff')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        username: managerUsername,
+        password: 'test123456',
+        role: 'MANAGER',
+        fullName: 'Reservation Test Manager',
+      })
+      .expect(201);
+
+    const managerLoginResponse = await request(app)
+      .post('/api/v1/auth/login')
+      .send({
+        username: managerUsername,
+        password: 'test123456',
+      })
+      .expect(200);
+    managerToken = managerLoginResponse.body.data.accessToken;
   });
 
   describe('GET /api/v1/tables', () => {
@@ -176,7 +198,7 @@ describe('Table & Reservation API Tests', () => {
     it('should update reservation status', async () => {
       const response = await request(app)
         .patch(`/api/v1/reservations/${reservationId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .send({
           status: 'CONFIRMED',
         })

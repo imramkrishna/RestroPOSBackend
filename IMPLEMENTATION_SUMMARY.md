@@ -70,52 +70,391 @@ All routes and functionality from BACKEND_SPECS.md have been fully implemented!
 ## 🎯 Implemented API Endpoints
 
 ### Authentication (4 endpoints)
-- POST `/api/v1/auth/login` - User login
-- POST `/api/v1/auth/refresh` - Refresh access token
-- POST `/api/v1/auth/logout` - User logout
-- GET `/api/v1/auth/me` - Get current user
+
+#### 1. POST `/api/v1/auth/login` - User login
+**Request Payload:**
+```json
+{
+  "username": "string (min: 3 chars)",
+  "password": "string (min: 6 chars)"
+}
+```
+**Example:**
+```json
+{
+  "username": "admin",
+  "password": "admin123"
+}
+```
+
+#### 2. POST `/api/v1/auth/refresh` - Refresh access token
+**Request Payload:**
+```json
+{
+  "refreshToken": "string (JWT token)"
+}
+```
+
+#### 3. POST `/api/v1/auth/logout` - User logout
+**Request:** No payload required (token in header)
+
+#### 4. GET `/api/v1/auth/me` - Get current user
+**Request:** No payload required (token in header)
+
+---
 
 ### Staff Management (5 endpoints)
-- GET `/api/v1/staff` - List all staff
-- POST `/api/v1/staff` - Create staff (Admin only)
-- GET `/api/v1/staff/:id` - Get staff details
-- PATCH `/api/v1/staff/:id` - Update staff (Admin only)
-- DELETE `/api/v1/staff/:id` - Delete staff (Admin only)
+
+#### 1. GET `/api/v1/staff` - List all staff
+**Request:** No payload required
+
+#### 2. POST `/api/v1/staff` - Create staff (Admin only)
+**Request Payload:**
+```json
+{
+  "username": "string (min: 3 chars)",
+  "password": "string (min: 6 chars)",
+  "role": "ADMIN | MANAGER | CASHIER | CHEF | WAITER",
+  "fullName": "string (required)",
+  "phone": "string (optional)",
+  "avatarUrl": "string - valid URL (optional)",
+  "shiftStart": "string - time format (optional)",
+  "shiftEnd": "string - time format (optional)"
+}
+```
+**Example:**
+```json
+{
+  "username": "chef1",
+  "password": "password123",
+  "role": "CHEF",
+  "fullName": "John Chef",
+  "phone": "9876543210",
+  "shiftStart": "09:00",
+  "shiftEnd": "18:00"
+}
+```
+
+#### 3. GET `/api/v1/staff/:id` - Get staff details
+**Request:** No payload required (UUID in URL)
+
+#### 4. PATCH `/api/v1/staff/:id` - Update staff (Admin only)
+**Request Payload:**
+```json
+{
+  "role": "ADMIN | MANAGER | CASHIER | CHEF | WAITER (optional)",
+  "fullName": "string (optional)",
+  "phone": "string (optional)",
+  "avatarUrl": "string - valid URL (optional)",
+  "status": "ACTIVE | LEAVE (optional)",
+  "shiftStart": "string - time format (optional)",
+  "shiftEnd": "string - time format (optional)"
+}
+```
+
+#### 5. DELETE `/api/v1/staff/:id` - Delete staff (Admin only)
+**Request:** No payload required (UUID in URL)
+
+---
 
 ### Menu Management (5 endpoints)
-- GET `/api/v1/menu` - Get full menu (Public)
-- POST `/api/v1/menu/categories` - Create category (Admin only)
-- POST `/api/v1/menu/items` - Create menu item (Admin only)
-- PATCH `/api/v1/menu/items/:id` - Update menu item (Admin only)
-- DELETE `/api/v1/menu/items/:id` - Archive menu item (Admin only)
+
+#### 1. GET `/api/v1/menu` - Get full menu (Public)
+**Request:** No payload required
+
+#### 2. POST `/api/v1/menu/categories` - Create category (Admin only)
+**Request Payload:**
+```json
+{
+  "name": "string (required)",
+  "icon": "string (optional)",
+  "imageUrl": "string - valid URL (optional)"
+}
+```
+**Example:**
+```json
+{
+  "name": "Appetizers",
+  "icon": "🥗",
+  "imageUrl": "https://example.com/appetizers.jpg"
+}
+```
+
+#### 3. POST `/api/v1/menu/items` - Create menu item (Admin only)
+**Request Payload:**
+```json
+{
+  "categoryId": "string - UUID (required)",
+  "name": "string (required)",
+  "description": "string (optional)",
+  "price": "number - positive (required)",
+  "imageUrl": "string - valid URL (optional)",
+  "isAvailable": "boolean (optional, default: true)",
+  "sizes": "object (optional) - e.g., {\"Small\": 299, \"Large\": 399}"
+}
+```
+**Example:**
+```json
+{
+  "categoryId": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Margherita Pizza",
+  "description": "Fresh mozzarella and basil",
+  "price": 450,
+  "imageUrl": "https://example.com/margherita.jpg",
+  "isAvailable": true,
+  "sizes": {
+    "Medium": 450,
+    "Large": 650
+  }
+}
+```
+
+#### 4. PATCH `/api/v1/menu/items/:id` - Update menu item (Admin only)
+**Request Payload:** (all fields optional)
+```json
+{
+  "categoryId": "string - UUID (optional)",
+  "name": "string (optional)",
+  "description": "string (optional)",
+  "price": "number - positive (optional)",
+  "imageUrl": "string - valid URL (optional)",
+  "isAvailable": "boolean (optional)",
+  "sizes": "object (optional)"
+}
+```
+
+#### 5. DELETE `/api/v1/menu/items/:id` - Archive menu item (Admin only)
+**Request:** No payload required (UUID in URL)
+
+---
 
 ### Order System (6 endpoints)
-- GET `/api/v1/orders` - List orders
-- POST `/api/v1/orders` - Create order
-- GET `/api/v1/orders/:id` - Get order details
-- PATCH `/api/v1/orders/:id/status` - Update order status
-- POST `/api/v1/orders/:id/items` - Add items to order
-- POST `/api/v1/orders/:id/pay` - Process payment
+
+#### 1. GET `/api/v1/orders` - List orders
+**Request:** No payload required
+
+#### 2. POST `/api/v1/orders` - Create order
+**Request Payload:**
+```json
+{
+  "tableId": "string - UUID (optional)",
+  "items": [
+    {
+      "menuItemId": "string - UUID (required)",
+      "quantity": "number - positive integer (required)",
+      "variant": "string (optional)",
+      "notes": "string (optional)"
+    }
+  ]
+}
+```
+**Example:**
+```json
+{
+  "tableId": "550e8400-e29b-41d4-a716-446655440000",
+  "items": [
+    {
+      "menuItemId": "660e8400-e29b-41d4-a716-446655440001",
+      "quantity": 2,
+      "variant": "Medium",
+      "notes": "Extra cheese"
+    },
+    {
+      "menuItemId": "770e8400-e29b-41d4-a716-446655440002",
+      "quantity": 1,
+      "notes": "No onions"
+    }
+  ]
+}
+```
+
+#### 3. GET `/api/v1/orders/:id` - Get order details
+**Request:** No payload required (UUID in URL)
+
+#### 4. PATCH `/api/v1/orders/:id/status` - Update order status
+**Request Payload:**
+```json
+{
+  "status": "PENDING | COOKING | SERVED | COMPLETED | CANCELLED"
+}
+```
+**Example:**
+```json
+{
+  "status": "COOKING"
+}
+```
+
+#### 5. POST `/api/v1/orders/:id/items` - Add items to order
+**Request Payload:**
+```json
+{
+  "items": [
+    {
+      "menuItemId": "string - UUID (required)",
+      "quantity": "number - positive integer (required)",
+      "variant": "string (optional)",
+      "notes": "string (optional)"
+    }
+  ]
+}
+```
+
+#### 6. POST `/api/v1/orders/:id/pay` - Process payment
+**Request Payload:**
+```json
+{
+  "paymentMethod": "CASH | CARD | UPI | OTHER"
+}
+```
+**Example:**
+```json
+{
+  "paymentMethod": "CARD"
+}
+```
+
+---
 
 ### Table Management (4 endpoints)
-- GET `/api/v1/tables` - Get all tables with live status
-- GET `/api/v1/tables/:id` - Get table details
-- POST `/api/v1/tables` - Create table
-- PATCH `/api/v1/tables/:id/status` - Update table status
+
+#### 1. GET `/api/v1/tables` - Get all tables with live status
+**Request:** No payload required
+
+#### 2. GET `/api/v1/tables/:id` - Get table details
+**Request:** No payload required (UUID in URL)
+
+#### 3. POST `/api/v1/tables` - Create table
+**Request Payload:**
+```json
+{
+  "tableNumber": "string (required)",
+  "capacity": "number - positive integer (required)"
+}
+```
+**Example:**
+```json
+{
+  "tableNumber": "T01",
+  "capacity": 4
+}
+```
+
+#### 4. PATCH `/api/v1/tables/:id/status` - Update table status
+**Request Payload:**
+```json
+{
+  "status": "AVAILABLE | OCCUPIED | RESERVED"
+}
+```
+**Example:**
+```json
+{
+  "status": "OCCUPIED"
+}
+```
+
+---
 
 ### Reservations (4 endpoints)
-- GET `/api/v1/reservations` - Get all reservations
-- POST `/api/v1/reservations` - Create reservation
-- GET `/api/v1/reservations/:id` - Get reservation details
-- PATCH `/api/v1/reservations/:id` - Update reservation status
+
+#### 1. GET `/api/v1/reservations` - Get all reservations
+**Request:** No payload required
+
+#### 2. POST `/api/v1/reservations` - Create reservation
+**Request Payload:**
+```json
+{
+  "tableId": "string - UUID (required)",
+  "customerName": "string (required)",
+  "phone": "string - min 10 chars (required)",
+  "guestCount": "number - positive integer (required)",
+  "datetime": "string - ISO 8601 format (required)",
+  "notes": "string (optional)"
+}
+```
+**Example:**
+```json
+{
+  "tableId": "550e8400-e29b-41d4-a716-446655440000",
+  "customerName": "John Doe",
+  "phone": "9876543210",
+  "guestCount": 4,
+  "datetime": "2026-03-24T19:30:00Z",
+  "notes": "Birthday celebration"
+}
+```
+
+#### 3. GET `/api/v1/reservations/:id` - Get reservation details
+**Request:** No payload required (UUID in URL)
+
+#### 4. PATCH `/api/v1/reservations/:id` - Update reservation status
+**Request Payload:**
+```json
+{
+  "status": "PENDING | CONFIRMED | CANCELLED | COMPLETED"
+}
+```
+**Example:**
+```json
+{
+  "status": "CONFIRMED"
+}
+```
+
+---
 
 ### Inventory (6 endpoints)
-- GET `/api/v1/inventory` - Get all inventory
-- POST `/api/v1/inventory` - Create inventory item
-- GET `/api/v1/inventory/alerts` - Get low stock alerts
-- GET `/api/v1/inventory/:id` - Get inventory item
-- PATCH `/api/v1/inventory/:id` - Update inventory quantity
-- DELETE `/api/v1/inventory/:id` - Delete inventory item
+
+#### 1. GET `/api/v1/inventory` - Get all inventory
+**Request:** No payload required
+
+#### 2. POST `/api/v1/inventory` - Create inventory item
+**Request Payload:**
+```json
+{
+  "itemName": "string (required)",
+  "category": "string (required)",
+  "quantity": "number (required)",
+  "unit": "string (required)",
+  "minStockLevel": "number (required)",
+  "costPrice": "number - positive (required)"
+}
+```
+**Example:**
+```json
+{
+  "itemName": "Tomato Sauce",
+  "category": "Condiments",
+  "quantity": 50,
+  "unit": "bottles",
+  "minStockLevel": 10,
+  "costPrice": 150.00
+}
+```
+
+#### 3. GET `/api/v1/inventory/alerts` - Get low stock alerts
+**Request:** No payload required
+
+#### 4. GET `/api/v1/inventory/:id` - Get inventory item
+**Request:** No payload required (UUID in URL)
+
+#### 5. PATCH `/api/v1/inventory/:id` - Update inventory quantity
+**Request Payload:**
+```json
+{
+  "quantity": "number"
+}
+```
+**Example:**
+```json
+{
+  "quantity": 75
+}
+```
+
+#### 6. DELETE `/api/v1/inventory/:id` - Delete inventory item
+**Request:** No payload required (UUID in URL)
 
 ## 🔒 Security Features Implemented
 

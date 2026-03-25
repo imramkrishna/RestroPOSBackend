@@ -51,8 +51,8 @@ describe('Staff API Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data).toHaveProperty('id');
-      expect(response.body.data.user.role).toBe('WAITER');
-      staffId = response.body.data.id;
+      expect(response.body.data.role).toBe('WAITER');
+      staffId = response.body.data.profile.id;
     });
 
     it('should fail with duplicate username', async () => {

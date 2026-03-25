@@ -3,6 +3,7 @@ import app from '../src/app';
 
 describe('Inventory API Tests', () => {
   let adminToken: string;
+  let managerToken: string;
   let inventoryItemId: string;
 
   beforeAll(async () => {
@@ -13,6 +14,27 @@ describe('Inventory API Tests', () => {
         password: 'admin123',
       });
     adminToken = response.body.data.accessToken;
+
+    const managerUsername = `inventory_mgr_${Date.now()}`;
+    await request(app)
+      .post('/api/v1/staff')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        username: managerUsername,
+        password: 'test123456',
+        role: 'MANAGER',
+        fullName: 'Inventory Test Manager',
+      })
+      .expect(201);
+
+    const managerLoginResponse = await request(app)
+      .post('/api/v1/auth/login')
+      .send({
+        username: managerUsername,
+        password: 'test123456',
+      })
+      .expect(200);
+    managerToken = managerLoginResponse.body.data.accessToken;
   });
 
   describe('POST /api/v1/inventory', () => {
@@ -100,7 +122,7 @@ describe('Inventory API Tests', () => {
     it('should update inventory quantity', async () => {
       const response = await request(app)
         .patch(`/api/v1/inventory/${inventoryItemId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .send({
           quantity: 75,
         })
@@ -113,7 +135,7 @@ describe('Inventory API Tests', () => {
     it('should fail with non-existent id', async () => {
       const response = await request(app)
         .patch('/api/v1/inventory/00000000-0000-0000-0000-000000000000')
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .send({
           quantity: 100,
         })
