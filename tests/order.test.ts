@@ -37,34 +37,48 @@ describe('Order API Tests', () => {
       .expect(200);
     managerToken = managerLoginResponse.body.data.accessToken;
 
-    // Get menu items
+    // Get menu items - but seeded items have invalid UUIDs (not RFC 4122 compliant)
+    // So we always create a new menu item with a proper UUID
     const menuResponse = await request(app).get('/api/v1/menu');
     const categories = menuResponse.body.data || [];
-    const categoryWithItems = categories.find((category: any) => Array.isArray(category.menuItems) && category.menuItems.length > 0);
 
-    if (categoryWithItems) {
-      menuItemId = categoryWithItems.menuItems[0].id;
+    // Find an existing category or create one
+    let categoryId: string;
+    if (categories.length > 0) {
+      categoryId = categories[0].id;
     } else {
       const categoryResponse = await request(app)
         .post('/api/v1/menu/categories')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           name: `Order Test Category ${Date.now()}`,
-        })
-        .expect(201);
+        });
 
-      const itemResponse = await request(app)
-        .post('/api/v1/menu/items')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          categoryId: categoryResponse.body.data.id,
-          name: `Order Test Item ${Date.now()}`,
-          price: 9.99,
-          isAvailable: true,
-        })
-        .expect(201);
+      if (categoryResponse.status !== 201) {
+        throw new Error(`Failed to create category: ${JSON.stringify(categoryResponse.body)}`);
+      }
+      categoryId = categoryResponse.body.data.id;
+    }
 
-      menuItemId = itemResponse.body.data.id;
+    // Always create a new menu item to get a proper UUID
+    const itemResponse = await request(app)
+      .post('/api/v1/menu/items')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        categoryId,
+        name: `Order Test Item ${Date.now()}`,
+        price: 9.99,
+        isAvailable: true,
+      });
+
+    if (itemResponse.status !== 201) {
+      throw new Error(`Failed to create menu item: ${JSON.stringify(itemResponse.body)}`);
+    }
+
+    menuItemId = itemResponse.body.data.id;
+
+    if (!menuItemId) {
+      throw new Error('Failed to get or create a menu item for testing');
     }
   });
 

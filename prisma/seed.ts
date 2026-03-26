@@ -58,32 +58,38 @@ async function main() {
 
   console.log('✅ Categories created');
 
-  // Create sample menu items
-  await prisma.menuItem.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000001' },
-    update: {},
-    create: {
-      id: '00000000-0000-0000-0000-000000000001',
-      categoryId: beverages.id,
-      name: 'Fresh Juice',
-      description: 'Freshly squeezed juice',
-      price: 5.99,
-      isAvailable: true,
-    },
+  // Create sample menu items (using findFirst + create to avoid hardcoded UUIDs)
+  const existingJuice = await prisma.menuItem.findFirst({
+    where: { name: 'Fresh Juice', categoryId: beverages.id },
   });
 
-  await prisma.menuItem.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000002' },
-    update: {},
-    create: {
-      id: '00000000-0000-0000-0000-000000000002',
-      categoryId: mainCourse.id,
-      name: 'Grilled Chicken',
-      description: 'Tender grilled chicken with herbs',
-      price: 15.99,
-      isAvailable: true,
-    },
+  if (!existingJuice) {
+    await prisma.menuItem.create({
+      data: {
+        categoryId: beverages.id,
+        name: 'Fresh Juice',
+        description: 'Freshly squeezed juice',
+        price: 5.99,
+        isAvailable: true,
+      },
+    });
+  }
+
+  const existingChicken = await prisma.menuItem.findFirst({
+    where: { name: 'Grilled Chicken', categoryId: mainCourse.id },
   });
+
+  if (!existingChicken) {
+    await prisma.menuItem.create({
+      data: {
+        categoryId: mainCourse.id,
+        name: 'Grilled Chicken',
+        description: 'Tender grilled chicken with herbs',
+        price: 15.99,
+        isAvailable: true,
+      },
+    });
+  }
 
   console.log('✅ Sample menu items created');
 

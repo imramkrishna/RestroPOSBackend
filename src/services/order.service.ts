@@ -129,7 +129,6 @@ export const orderService = {
       });
     }
 
-    // Emit socket event for new order
     emitOrderUpdate('order:created', order);
 
     return order;
