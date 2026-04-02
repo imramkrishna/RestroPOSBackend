@@ -69,6 +69,13 @@ All routes and functionality from BACKEND_SPECS.md have been fully implemented!
 
 ## 🎯 Implemented API Endpoints
 
+### Health Check (1 endpoint)
+
+#### 1. GET `/health` - Server health check
+**Request:** No payload required
+
+---
+
 ### Authentication (4 endpoints)
 
 #### 1. POST `/api/v1/auth/login` - User login
@@ -456,6 +463,74 @@ All routes and functionality from BACKEND_SPECS.md have been fully implemented!
 #### 6. DELETE `/api/v1/inventory/:id` - Delete inventory item
 **Request:** No payload required (UUID in URL)
 
+---
+
+## 🔌 Socket.IO API
+
+### Connection
+
+- **Server URL:** `http://localhost:<PORT>`
+- **Socket path:** default Socket.IO path (`/socket.io`)
+- **Auth:** no socket-level auth handshake is currently implemented
+
+### Client → Server Events (2)
+
+#### 1. `join:kitchen`
+**Payload:** none
+**Description:** Joins the `kitchen` room to receive kitchen-relevant order events.
+
+#### 2. `join:cashier`
+**Payload:** none
+**Description:** Joins the `cashier` room to receive billing/payment-relevant order events.
+
+### Server → Client Events (4)
+
+All order events are emitted to both `kitchen` and `cashier` rooms.
+
+#### 1. `order:created`
+**Payload:** full order object (order, staff, table, and orderItems)
+
+#### 2. `order:statusUpdate`
+**Payload:** updated order object after status change
+
+#### 3. `order:itemsAdded`
+**Payload:** updated order object after adding items and recalculating totals
+
+#### 4. `order:completed`
+**Payload:** updated order object after payment completion
+
+### Example Event Payload Shape
+
+```json
+{
+  "id": "order-uuid",
+  "status": "PENDING",
+  "subtotal": 1000,
+  "tax": 50,
+  "total": 1050,
+  "paymentMethod": null,
+  "table": {
+    "id": "table-uuid",
+    "tableNumber": "T01"
+  },
+  "staff": {
+    "id": "staff-uuid",
+    "username": "waiter1",
+    "role": "WAITER"
+  },
+  "orderItems": [
+    {
+      "id": "order-item-uuid",
+      "menuItemId": "menu-item-uuid",
+      "quantity": 2,
+      "variant": "Medium",
+      "priceAtTime": 500,
+      "notes": "Less spicy"
+    }
+  ]
+}
+```
+
 ## 🔒 Security Features Implemented
 
 ✅ JWT authentication with access & refresh tokens
@@ -546,5 +621,5 @@ Complete Prisma schema with:
 ---
 
 **Total Files Created: 41**
-**Total Endpoints: 34**
+**Total Endpoints: 35**
 **Status: 100% Complete** ✅

@@ -14,7 +14,7 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/', authorize(['chef', 'manager', 'waiter', 'cashier']), orderController.getAllOrders);
+router.get('/', authorize(['admin', 'chef', 'manager', 'waiter', 'cashier']), orderController.getAllOrders);
 router.post('/', validate(createOrderSchema), orderController.createOrder);
 router.get('/:id', orderController.getOrderById);
 router.patch('/:id/status', authorize(['chef', 'waiter', 'manager']), validate(updateOrderStatusSchema), orderController.updateOrderStatus);
