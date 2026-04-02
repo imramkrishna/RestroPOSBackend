@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { hashPassword, comparePassword } from '../utils/password';
+import { comparePassword } from '../utils/password';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { createError } from '../utils/AppError';
 

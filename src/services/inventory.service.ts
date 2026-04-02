@@ -36,7 +36,7 @@ export const inventoryService = {
     const item = await prisma.inventory.findUnique({
       where: { id },
     });
-
+    
     if (!item) {
       throw createError.notFound('Inventory item not found');
     }
