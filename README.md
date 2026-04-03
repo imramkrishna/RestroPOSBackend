@@ -56,7 +56,12 @@ A comprehensive backend system for restaurant Point of Sale (POS) operations, bu
    JWT_REFRESH_EXPIRES_IN="7d"
    PORT=3000
    NODE_ENV="development"
+   PRISMA_QUERY_LOGS="false"
+   SOCKET_DEBUG_LOGS="false"
    ```
+
+   Set `PRISMA_QUERY_LOGS="true"` only when you need SQL query debugging.
+   Set `SOCKET_DEBUG_LOGS="true"` when you want connection/join/disconnect socket logs.
 
 4. **Set up the database**
    ```bash

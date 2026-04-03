@@ -17,21 +17,27 @@ const io = new SocketServer(server, {
   },
 });
 
+const socketLog = (...args: unknown[]) => {
+  if (config.socketDebugLogs) {
+    console.log(...args);
+  }
+};
+
 io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+  socketLog(`Client connected: ${socket.id}`);
 
   socket.on('join:kitchen', () => {
     socket.join('kitchen');
-    console.log(`${socket.id} joined kitchen room`);
+    socketLog(`${socket.id} joined kitchen room`);
   });
 
   socket.on('join:cashier', () => {
     socket.join('cashier');
-    console.log(`${socket.id} joined cashier room`);
+    socketLog(`${socket.id} joined cashier room`);
   });
 
   socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
+    socketLog(`Client disconnected: ${socket.id}`);
   });
 });
 

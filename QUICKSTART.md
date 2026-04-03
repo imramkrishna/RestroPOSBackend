@@ -19,6 +19,8 @@ cp .env.example .env
 Edit `.env` and update the `DATABASE_URL` with your PostgreSQL credentials:
 ```
 DATABASE_URL="postgresql://YOUR_USER:YOUR_PASSWORD@localhost:5432/restro_pos?schema=public"
+PRISMA_QUERY_LOGS="false"
+SOCKET_DEBUG_LOGS="false"
 ```
 
 ### 3. Generate Prisma Client
