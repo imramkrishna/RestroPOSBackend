@@ -12,6 +12,6 @@ router.use(authenticate);
 router.get('/', reservationController.getAllReservations);
 router.post('/', validate(createReservationSchema), reservationController.createReservation);
 router.get('/:id', reservationController.getReservationById);
-router.patch('/:id', authorize(['manager', 'waiter']), validate(updateReservationSchema), reservationController.updateReservationStatus);
+router.patch('/:id', authorize(['admin','manager', 'waiter']), validate(updateReservationSchema), reservationController.updateReservationStatus);
 
 export default router;

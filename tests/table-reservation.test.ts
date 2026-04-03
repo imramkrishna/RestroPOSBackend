@@ -139,6 +139,31 @@ describe('Table & Reservation API Tests', () => {
       reservationId = response.body.data.id;
     });
 
+    it('should create reservation with frontend payload fields', async () => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 5);
+      const date = futureDate.toISOString().split('T')[0];
+
+      const response = await request(app)
+        .post('/api/v1/reservations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          tableId,
+          customerName: 'Frontend User',
+          customerPhone: '9998887776',
+          partySize: 2,
+          date,
+          startTime: '18:30',
+          endTime: '20:00',
+          notes: '',
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.phone).toBe('9998887776');
+      expect(response.body.data.guestCount).toBe(2);
+    });
+
     it('should fail with guest count exceeding capacity', async () => {
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 2);
