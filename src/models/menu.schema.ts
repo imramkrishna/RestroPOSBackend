@@ -1,10 +1,15 @@
 import { z } from 'zod';
 
+const optionalUrl = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().url().optional()
+);
+
 export const createCategorySchema = z.object({
   body: z.object({
     name: z.string().min(1),
     icon: z.string().optional(),
-    imageUrl: z.string().url().optional(),
+    imageUrl: optionalUrl,
   }),
 });
 
@@ -14,7 +19,7 @@ export const createMenuItemSchema = z.object({
     name: z.string().min(1),
     description: z.string().optional(),
     price: z.number().positive(),
-    imageUrl: z.string().url().optional(),
+    imageUrl: optionalUrl,
     isAvailable: z.boolean().optional(),
     sizes: z.any().optional(),
   }),
@@ -26,7 +31,7 @@ export const updateMenuItemSchema = z.object({
     name: z.string().min(1).optional(),
     description: z.string().optional(),
     price: z.number().positive().optional(),
-    imageUrl: z.string().url().optional(),
+    imageUrl: optionalUrl,
     isAvailable: z.boolean().optional(),
     sizes: z.any().optional(),
   }),
