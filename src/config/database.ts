@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { config } from './env';
+import { config } from './env.js';
 
 const prismaLogLevels: Array<'query' | 'warn' | 'error'> =
   config.nodeEnv === 'development' ? ['warn', 'error'] : ['error'];

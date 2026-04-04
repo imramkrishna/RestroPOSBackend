@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/authenticate';
-import { inventoryService } from '../services/inventory.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { AuthRequest } from '../middlewares/authenticate.js';
+import { inventoryService } from '../services/inventory.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const inventoryController = {
   getAllInventory: asyncHandler(async (req: AuthRequest, res: Response) => {

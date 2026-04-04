@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/authenticate';
-import { orderService } from '../services/order.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { AuthRequest } from '../middlewares/authenticate.js';
+import { orderService } from '../services/order.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 import { OrderStatus } from '@prisma/client';
 
 export const orderController = {

@@ -1,7 +1,7 @@
-import prisma from '../config/database';
-import { comparePassword } from '../utils/password';
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
-import { createError } from '../utils/AppError';
+import prisma from '../config/database.js';
+import { comparePassword } from '../utils/password.js';
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
+import { createError } from '../utils/AppError.js';
 
 export const authService = {
   async login(username: string, password: string) {

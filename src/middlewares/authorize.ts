@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from './authenticate';
-import { createError } from '../utils/AppError';
+import { AuthRequest } from './authenticate.js';
+import { createError } from '../utils/AppError.js';
 
 export const authorize = (allowedRoles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {

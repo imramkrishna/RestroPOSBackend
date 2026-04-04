@@ -1,9 +1,9 @@
 import { Server as HTTPServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
-import app from './app';
-import { config } from './config/env';
-import prisma from './config/database';
-import { setSocketIO } from './utils/socket';
+import app from './app.js';
+import { config } from './config/env.js';
+import prisma from './config/database.js';
+import { setSocketIO } from './utils/socket.js';
 
 const PORT = config.port;
 

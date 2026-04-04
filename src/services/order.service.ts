@@ -1,7 +1,7 @@
-import prisma from '../config/database';
-import { createError } from '../utils/AppError';
+import prisma from '../config/database.js';
+import { createError } from '../utils/AppError.js';
 import { OrderStatus, PaymentMethod } from '@prisma/client';
-import { emitOrderUpdate } from '../utils/socket';
+import { emitOrderUpdate } from '../utils/socket.js';
 
 const TAX_RATE = 0.05; // 5% tax
 

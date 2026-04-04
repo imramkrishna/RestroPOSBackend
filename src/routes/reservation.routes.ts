@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { reservationController } from '../controllers/reservation.controller';
-import { authenticate } from '../middlewares/authenticate';
-import { authorize } from '../middlewares/authorize';
-import { validate } from '../middlewares/validate';
-import { createReservationSchema, updateReservationSchema } from '../models/reservation.schema';
+import { reservationController } from '../controllers/reservation.controller.js';
+import { authenticate } from '../middlewares/authenticate.js';
+import { authorize } from '../middlewares/authorize.js';
+import { validate } from '../middlewares/validate.js';
+import { createReservationSchema, updateReservationSchema } from '../models/reservation.schema.js';
 
 const router = Router();
 

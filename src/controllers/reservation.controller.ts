@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/authenticate';
-import { reservationService } from '../services/reservation.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { AuthRequest } from '../middlewares/authenticate.js';
+import { reservationService } from '../services/reservation.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 import { ReservationStatus } from '@prisma/client';
 
 export const reservationController = {

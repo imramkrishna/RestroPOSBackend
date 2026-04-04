@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/authenticate';
-import { staffService } from '../services/staff.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { AuthRequest } from '../middlewares/authenticate.js';
+import { staffService } from '../services/staff.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const staffController = {
   getAllStaff: asyncHandler(async (req: AuthRequest, res: Response) => {

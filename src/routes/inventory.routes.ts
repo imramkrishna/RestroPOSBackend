@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { inventoryController } from '../controllers/inventory.controller';
-import { authenticate } from '../middlewares/authenticate';
-import { authorize } from '../middlewares/authorize';
-import { validate } from '../middlewares/validate';
-import { updateInventorySchema, createInventorySchema } from '../models/inventory.schema';
+import { inventoryController } from '../controllers/inventory.controller.js';
+import { authenticate } from '../middlewares/authenticate.js';
+import { authorize } from '../middlewares/authorize.js';
+import { validate } from '../middlewares/validate.js';
+import { updateInventorySchema, createInventorySchema } from '../models/inventory.schema.js';
 
 const router = Router();
 

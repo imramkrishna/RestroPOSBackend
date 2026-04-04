@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { menuController } from '../controllers/menu.controller';
-import { authenticate } from '../middlewares/authenticate';
-import { authorize } from '../middlewares/authorize';
-import { validate } from '../middlewares/validate';
-import { createCategorySchema, createMenuItemSchema, updateMenuItemSchema } from '../models/menu.schema';
+import { menuController } from '../controllers/menu.controller.js';
+import { authenticate } from '../middlewares/authenticate.js';
+import { authorize } from '../middlewares/authorize.js';
+import { validate } from '../middlewares/validate.js';
+import { createCategorySchema, createMenuItemSchema, updateMenuItemSchema } from '../models/menu.schema.js';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
-import prisma from '../config/database';
-import { hashPassword } from '../utils/password';
-import { createError } from '../utils/AppError';
+import prisma from '../config/database.js';
+import { hashPassword } from '../utils/password.js';
+import { createError } from '../utils/AppError.js';
 import { UserRole, StaffStatus } from '@prisma/client';
 
 export const staffService = {

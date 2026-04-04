@@ -1,5 +1,5 @@
-import prisma from '../config/database';
-import { createError } from '../utils/AppError';
+import prisma from '../config/database.js';
+import { createError } from '../utils/AppError.js';
 import { ReservationStatus } from '@prisma/client';
 
 export const reservationService = {

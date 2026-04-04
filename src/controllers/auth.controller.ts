@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/authenticate';
-import { authService } from '../services/auth.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { AuthRequest } from '../middlewares/authenticate.js';
+import { authService } from '../services/auth.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const authController = {
   login: asyncHandler(async (req: AuthRequest, res: Response) => {

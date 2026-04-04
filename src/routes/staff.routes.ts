@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { staffController } from '../controllers/staff.controller';
-import { authenticate } from '../middlewares/authenticate';
-import { authorize } from '../middlewares/authorize';
-import { validate } from '../middlewares/validate';
-import { createStaffSchema, updateStaffSchema } from '../models/staff.schema';
+import { staffController } from '../controllers/staff.controller.js';
+import { authenticate } from '../middlewares/authenticate.js';
+import { authorize } from '../middlewares/authorize.js';
+import { validate } from '../middlewares/validate.js';
+import { createStaffSchema, updateStaffSchema } from '../models/staff.schema.js';
 
 const router = Router();
 

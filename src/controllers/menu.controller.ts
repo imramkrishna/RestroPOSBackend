@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/authenticate';
-import { menuService } from '../services/menu.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { AuthRequest } from '../middlewares/authenticate.js';
+import { menuService } from '../services/menu.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const menuController = {
   getFullMenu: asyncHandler(async (req: AuthRequest, res: Response) => {

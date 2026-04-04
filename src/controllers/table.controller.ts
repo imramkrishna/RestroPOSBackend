@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/authenticate';
-import { tableService } from '../services/table.service';
-import { asyncHandler } from '../utils/asyncHandler';
+import { AuthRequest } from '../middlewares/authenticate.js';
+import { tableService } from '../services/table.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const tableController = {
   getAllTables: asyncHandler(async (req: AuthRequest, res: Response) => {
