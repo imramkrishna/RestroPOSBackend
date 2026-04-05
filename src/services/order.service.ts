@@ -1,31 +1,135 @@
 import prisma from '../config/database.js';
 import { createError } from '../utils/AppError.js';
-import { OrderStatus, PaymentMethod } from '@prisma/client';
+import {
+  DeliveryProvider,
+  OrderChannel,
+  OrderStatus,
+  PaymentMethod,
+  SettlementStatus,
+} from '@prisma/client';
 import { emitOrderUpdate } from '../utils/socket.js';
 
 const TAX_RATE = 0.05; // 5% tax
+const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'COOKING', 'SERVED'];
+
+const orderInclude = {
+  table: true,
+  staff: {
+    select: {
+      id: true,
+      username: true,
+      role: true,
+    },
+  },
+  orderItems: {
+    include: {
+      menuItem: true,
+    },
+  },
+  onlineDetails: {
+    include: {
+      settlementBatch: true,
+    },
+  },
+} as const;
+
+type OrderListFilters = {
+  status?: OrderStatus;
+  channel?: OrderChannel;
+  provider?: DeliveryProvider;
+  settlementStatus?: SettlementStatus;
+  weekStart?: string;
+  weekEnd?: string;
+};
+
+type OnlineOrderInput = {
+  provider: DeliveryProvider;
+  externalOrderId?: string;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  deliveryInstructions?: string;
+  providerGrossAmount?: number;
+  providerCommission?: number;
+  providerDeliveryFee?: number;
+  providerDiscount?: number;
+};
+
+const parseDateBoundary = (value: string, boundary: 'start' | 'end'): Date => {
+  const suffix = boundary === 'start' ? 'T00:00:00.000Z' : 'T23:59:59.999Z';
+  const parsed = new Date(`${value}${suffix}`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw createError.badRequest(`Invalid date value: ${value}`);
+  }
+
+  return parsed;
+};
+
+const getDateRange = (start?: string, end?: string) => {
+  if (!start && !end) {
+    return undefined;
+  }
+
+  if (!start || !end) {
+    throw createError.badRequest('Both weekStart and weekEnd are required together');
+  }
+
+  const startDate = parseDateBoundary(start, 'start');
+  const endDate = parseDateBoundary(end, 'end');
+
+  if (startDate > endDate) {
+    throw createError.badRequest('weekStart cannot be after weekEnd');
+  }
+
+  return {
+    startDate,
+    endDate,
+  };
+};
+
+const calculateExpectedPayout = (details: OnlineOrderInput): number | undefined => {
+  if (details.providerGrossAmount === undefined) {
+    return undefined;
+  }
+
+  const commission = details.providerCommission ?? 0;
+  const discount = details.providerDiscount ?? 0;
+  return Math.max(0, details.providerGrossAmount - commission - discount);
+};
 
 export const orderService = {
-  async getAllOrders(filters?: { status?: OrderStatus }) {
-    const where = filters?.status ? { status: filters.status } : {};
+  async getAllOrders(filters?: OrderListFilters) {
+    const where: any = {};
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.channel) {
+      where.channel = filters.channel;
+    }
+
+    const dateRange = getDateRange(filters?.weekStart, filters?.weekEnd);
+    if (dateRange) {
+      where.createdAt = {
+        gte: dateRange.startDate,
+        lte: dateRange.endDate,
+      };
+    }
+
+    if (filters?.provider || filters?.settlementStatus) {
+      where.onlineDetails = {
+        is: {
+          ...(filters.provider ? { provider: filters.provider } : {}),
+          ...(filters.settlementStatus ? { settlementStatus: filters.settlementStatus } : {}),
+        },
+      };
+    }
 
     const orders = await prisma.order.findMany({
       where,
-      include: {
-        table: true,
-        staff: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-          },
-        },
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-      },
+      include: orderInclude,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -35,7 +139,9 @@ export const orderService = {
   async createOrder(
     staffId: string,
     data: {
+      channel?: OrderChannel;
       tableId?: string;
+      onlineDetails?: OnlineOrderInput;
       items: Array<{
         menuItemId: string;
         quantity: number;
@@ -44,6 +150,24 @@ export const orderService = {
       }>;
     }
   ) {
+    const channel: OrderChannel = data.channel ?? (data.tableId ? 'DINE_IN' : 'TAKEAWAY');
+
+    if (channel === 'DINE_IN' && !data.tableId) {
+      throw createError.badRequest('tableId is required for DINE_IN orders');
+    }
+
+    if (channel !== 'DINE_IN' && data.tableId) {
+      throw createError.badRequest('tableId is only allowed for DINE_IN orders');
+    }
+
+    if (channel === 'ONLINE' && !data.onlineDetails) {
+      throw createError.badRequest('onlineDetails are required for ONLINE orders');
+    }
+
+    if (channel !== 'ONLINE' && data.onlineDetails) {
+      throw createError.badRequest('onlineDetails are only allowed for ONLINE orders');
+    }
+
     if (data.tableId) {
       const table = await prisma.table.findUnique({
         where: { id: data.tableId },
@@ -94,35 +218,33 @@ export const orderService = {
     const tax = subtotal * TAX_RATE;
     const total = subtotal + tax;
 
+    const orderCreateData: any = {
+      staffId,
+      channel,
+      tableId: data.tableId,
+      subtotal,
+      tax,
+      total,
+      orderItems: {
+        create: orderItemsData,
+      },
+    };
+
+    if (channel === 'ONLINE' && data.onlineDetails) {
+      orderCreateData.onlineDetails = {
+        create: {
+          ...data.onlineDetails,
+          expectedPayout: calculateExpectedPayout(data.onlineDetails),
+        },
+      };
+    }
+
     const order = await prisma.order.create({
-      data: {
-        staffId,
-        tableId: data.tableId,
-        subtotal,
-        tax,
-        total,
-        orderItems: {
-          create: orderItemsData,
-        },
-      },
-      include: {
-        table: true,
-        staff: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-          },
-        },
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-      },
+      data: orderCreateData,
+      include: orderInclude,
     });
 
-    if (data.tableId) {
+    if (channel === 'DINE_IN' && data.tableId) {
       await prisma.table.update({
         where: { id: data.tableId },
         data: { status: 'OCCUPIED' },
@@ -137,21 +259,7 @@ export const orderService = {
   async getOrderById(id: string) {
     const order = await prisma.order.findUnique({
       where: { id },
-      include: {
-        table: true,
-        staff: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-          },
-        },
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-      },
+      include: orderInclude,
     });
 
     if (!order) {
@@ -177,21 +285,7 @@ export const orderService = {
     const updatedOrder = await prisma.order.update({
       where: { id },
       data: { status },
-      include: {
-        table: true,
-        staff: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-          },
-        },
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-      },
+      include: orderInclude,
     });
 
     // Emit socket event for order status update
@@ -267,21 +361,7 @@ export const orderService = {
         tax: newTax,
         total: newTotal,
       },
-      include: {
-        table: true,
-        staff: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-          },
-        },
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-      },
+      include: orderInclude,
     });
 
     // Emit socket event for order update
@@ -293,7 +373,7 @@ export const orderService = {
   async processPayment(orderId: string, paymentMethod: PaymentMethod) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { table: true },
+      include: { table: true, onlineDetails: true },
     });
 
     if (!order) {
@@ -314,21 +394,7 @@ export const orderService = {
         status: 'COMPLETED',
         paymentMethod,
       },
-      include: {
-        table: true,
-        staff: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-          },
-        },
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-      },
+      include: orderInclude,
     });
 
     if (order.tableId) {
@@ -336,7 +402,7 @@ export const orderService = {
         where: {
           tableId: order.tableId,
           status: {
-            in: ['PENDING', 'COOKING', 'SERVED'],
+            in: ACTIVE_ORDER_STATUSES,
           },
         },
       });
@@ -353,5 +419,194 @@ export const orderService = {
     emitOrderUpdate('order:completed', updatedOrder);
 
     return updatedOrder;
+  },
+
+  async getOnlineSettlementSummary(filters: {
+    provider?: DeliveryProvider;
+    weekStart: string;
+    weekEnd: string;
+  }) {
+    const dateRange = getDateRange(filters.weekStart, filters.weekEnd)!;
+
+    const where: any = {
+      settlementStatus: 'PENDING' as SettlementStatus,
+      ...(filters.provider ? { provider: filters.provider } : {}),
+      order: {
+        createdAt: {
+          gte: dateRange.startDate,
+          lte: dateRange.endDate,
+        },
+      },
+    };
+
+    const grouped = await prisma.onlineOrderDetails.groupBy({
+      by: ['provider'],
+      where,
+      _count: { _all: true },
+      _sum: {
+        providerGrossAmount: true,
+        providerCommission: true,
+        providerDiscount: true,
+        expectedPayout: true,
+      },
+    });
+
+    const providers = grouped.map((group) => {
+      const grossAmount = group._sum.providerGrossAmount ?? 0;
+      const commissionAmount = group._sum.providerCommission ?? 0;
+      const discountAmount = group._sum.providerDiscount ?? 0;
+      const netAmount = group._sum.expectedPayout ?? grossAmount - commissionAmount - discountAmount;
+
+      return {
+        provider: group.provider,
+        orderCount: group._count._all,
+        grossAmount,
+        commissionAmount,
+        discountAmount,
+        netAmount,
+      };
+    });
+
+    const totals = providers.reduce(
+      (acc, provider) => ({
+        orderCount: acc.orderCount + provider.orderCount,
+        grossAmount: acc.grossAmount + provider.grossAmount,
+        commissionAmount: acc.commissionAmount + provider.commissionAmount,
+        discountAmount: acc.discountAmount + provider.discountAmount,
+        netAmount: acc.netAmount + provider.netAmount,
+      }),
+      {
+        orderCount: 0,
+        grossAmount: 0,
+        commissionAmount: 0,
+        discountAmount: 0,
+        netAmount: 0,
+      }
+    );
+
+    return {
+      weekStart: filters.weekStart,
+      weekEnd: filters.weekEnd,
+      providers,
+      totals,
+    };
+  },
+
+  async createSettlementBatch(data: {
+    provider: DeliveryProvider;
+    weekStart: string;
+    weekEnd: string;
+    notes?: string;
+  }) {
+    const dateRange = getDateRange(data.weekStart, data.weekEnd)!;
+
+    const existingBatch = await prisma.settlementBatch.findFirst({
+      where: {
+        provider: data.provider,
+        weekStart: dateRange.startDate,
+        weekEnd: dateRange.endDate,
+      },
+    });
+
+    if (existingBatch) {
+      throw createError.badRequest('Settlement batch already exists for this provider and week range');
+    }
+
+    const where: any = {
+      provider: data.provider,
+      settlementStatus: 'PENDING' as SettlementStatus,
+      order: {
+        createdAt: {
+          gte: dateRange.startDate,
+          lte: dateRange.endDate,
+        },
+      },
+    };
+
+    const pendingOnlineOrders = await prisma.onlineOrderDetails.findMany({
+      where,
+      select: {
+        id: true,
+        providerGrossAmount: true,
+        providerCommission: true,
+        providerDiscount: true,
+        expectedPayout: true,
+      },
+    });
+
+    if (pendingOnlineOrders.length === 0) {
+      throw createError.badRequest('No pending online orders found for this provider and week range');
+    }
+
+    const grossAmount = pendingOnlineOrders.reduce(
+      (total, order) => total + (order.providerGrossAmount ?? 0),
+      0
+    );
+    const commissionAmount = pendingOnlineOrders.reduce(
+      (total, order) => total + (order.providerCommission ?? 0),
+      0
+    );
+    const discountAmount = pendingOnlineOrders.reduce(
+      (total, order) => total + (order.providerDiscount ?? 0),
+      0
+    );
+    const netAmount = pendingOnlineOrders.reduce(
+      (total, order) =>
+        total +
+        (order.expectedPayout ??
+          (order.providerGrossAmount ?? 0) -
+            (order.providerCommission ?? 0) -
+            (order.providerDiscount ?? 0)),
+      0
+    );
+
+    const settledAt = new Date();
+
+    const batch = await prisma.$transaction(async (tx) => {
+      const createdBatch = await tx.settlementBatch.create({
+        data: {
+          provider: data.provider,
+          weekStart: dateRange.startDate,
+          weekEnd: dateRange.endDate,
+          orderCount: pendingOnlineOrders.length,
+          grossAmount,
+          commissionAmount,
+          netAmount,
+          notes: data.notes,
+          settledAt,
+        },
+      });
+
+      await tx.onlineOrderDetails.updateMany({
+        where,
+        data: {
+          settlementStatus: 'SETTLED',
+          settlementBatchId: createdBatch.id,
+          settledAt,
+        },
+      });
+
+      return tx.settlementBatch.findUnique({
+        where: { id: createdBatch.id },
+        include: {
+          onlineOrders: {
+            include: {
+              order: {
+                include: orderInclude,
+              },
+            },
+          },
+        },
+      });
+    });
+
+    if (!batch) {
+      throw createError.internal('Failed to create settlement batch');
+    }
+
+    return {
+      ...batch,
+      discountAmount,
+    };
   },
 };

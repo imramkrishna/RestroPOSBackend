@@ -5,8 +5,11 @@ import { authorize } from '../middlewares/authorize.js';
 import { validate } from '../middlewares/validate.js';
 import {
   createOrderSchema,
+  createSettlementBatchSchema,
   updateOrderStatusSchema,
   addOrderItemsSchema,
+  getOrdersQuerySchema,
+  onlineSettlementSummarySchema,
   processPaymentSchema,
 } from '../models/order.schema.js';
 
@@ -14,7 +17,24 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/', authorize(['admin', 'chef', 'manager', 'waiter', 'cashier']), orderController.getAllOrders);
+router.get(
+  '/',
+  authorize(['admin', 'chef', 'manager', 'waiter', 'cashier']),
+  validate(getOrdersQuerySchema),
+  orderController.getAllOrders
+);
+router.get(
+  '/online/summary',
+  authorize(['admin', 'manager', 'cashier']),
+  validate(onlineSettlementSummarySchema),
+  orderController.getOnlineSettlementSummary
+);
+router.post(
+  '/online/settlements',
+  authorize(['admin', 'manager', 'cashier']),
+  validate(createSettlementBatchSchema),
+  orderController.createSettlementBatch
+);
 router.post('/', validate(createOrderSchema), orderController.createOrder);
 router.get('/:id', orderController.getOrderById);
 router.patch('/:id/status', authorize(['admin','chef', 'waiter', 'manager']), validate(updateOrderStatusSchema), orderController.updateOrderStatus);

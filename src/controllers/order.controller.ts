@@ -2,12 +2,24 @@ import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authenticate.js';
 import { orderService } from '../services/order.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { OrderStatus } from '@prisma/client';
+import {
+  DeliveryProvider,
+  OrderChannel,
+  OrderStatus,
+  SettlementStatus,
+} from '@prisma/client';
 
 export const orderController = {
   getAllOrders: asyncHandler(async (req: AuthRequest, res: Response) => {
-    const status = req.query.status as OrderStatus | undefined;
-    const orders = await orderService.getAllOrders(status ? { status } : undefined);
+    const query = req.query as Record<string, string | undefined>;
+    const orders = await orderService.getAllOrders({
+      status: query.status as OrderStatus | undefined,
+      channel: query.channel as OrderChannel | undefined,
+      provider: query.provider as DeliveryProvider | undefined,
+      settlementStatus: query.settlementStatus as SettlementStatus | undefined,
+      weekStart: query.weekStart,
+      weekEnd: query.weekEnd,
+    });
 
     res.status(200).json({
       success: true,
@@ -65,6 +77,35 @@ export const orderController = {
     res.status(200).json({
       success: true,
       data: order,
+    });
+  }),
+
+  getOnlineSettlementSummary: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const query = req.query as Record<string, string | undefined>;
+    const summary = await orderService.getOnlineSettlementSummary({
+      provider: query.provider as DeliveryProvider | undefined,
+      weekStart: query.weekStart!,
+      weekEnd: query.weekEnd!,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: summary,
+    });
+  }),
+
+  createSettlementBatch: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { provider, weekStart, weekEnd, notes } = req.body;
+    const batch = await orderService.createSettlementBatch({
+      provider,
+      weekStart,
+      weekEnd,
+      notes,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: batch,
     });
   }),
 };
