@@ -98,6 +98,12 @@ export const updateOrderStatusSchema = z.object({
   }),
 });
 
+export const cancelOrderSchema = z.object({
+  params: z.object({
+    id: z.string().uuid(),
+  }),
+});
+
 export const addOrderItemsSchema = z.object({
   body: z.object({
     items: z.array(

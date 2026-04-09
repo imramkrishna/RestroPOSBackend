@@ -210,9 +210,46 @@ If no pending records are found, API returns `400`.
 ### 4.5 Existing endpoints (unchanged path)
 
 - `GET /api/v1/orders/:id`
+- `PATCH /api/v1/orders/:id/cancel`
 - `PATCH /api/v1/orders/:id/status`
 - `POST /api/v1/orders/:id/items`
 - `POST /api/v1/orders/:id/pay`
+
+### 4.6 Cancel order
+
+`PATCH /api/v1/orders/:id/cancel`
+
+No request body is required.
+
+#### Behavior
+- Cancels an active order by setting status to `CANCELLED`.
+- Fails with `400` if order is already `CANCELLED`.
+- Fails with `400` if order is already `COMPLETED`.
+- If it is a dine-in order and no other active orders remain for that table,
+  table status is set to `AVAILABLE`.
+
+#### Example request
+
+```http
+PATCH /api/v1/orders/550e8400-e29b-41d4-a716-446655440000/cancel
+Authorization: Bearer <token>
+```
+
+#### Example response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "CANCELLED",
+    "subtotal": 95.24,
+    "tax": 4.76,
+    "total": 100,
+    "taxRatePercentage": 5
+  }
+}
+```
 
 ## 5. Frontend Changes Required
 
@@ -310,13 +347,33 @@ Affected endpoints returning updated billing fields:
 - `POST /api/v1/orders`
 - `GET /api/v1/orders`
 - `GET /api/v1/orders/:id`
+- `PATCH /api/v1/orders/:id/cancel`
 - `PATCH /api/v1/orders/:id/status`
 - `POST /api/v1/orders/:id/items`
 - `POST /api/v1/orders/:id/pay`
 
+## 5.7 Frontend cancel-order implementation
+
+Use this API when user taps cancel button on an order card/detail page.
+
+### Request
+
+```ts
+await axios.patch(`/api/v1/orders/${orderId}/cancel`, undefined, {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+### UI handling
+- On success: update local order status to `CANCELLED`.
+- Disable `Add Items`, `Pay`, and `Cancel` actions for that order.
+- Recompute table occupancy view if your UI shows live table states.
+- Show backend error message for `400` cases (already cancelled/completed).
+
 ## 6. Role Access
 
 - `GET /api/v1/orders`: `admin`, `chef`, `manager`, `waiter`, `cashier`
+- `PATCH /api/v1/orders/:id/cancel`: `admin`, `chef`, `manager`, `waiter`
 - `GET /api/v1/orders/online/summary`: `admin`, `manager`, `cashier`
 - `POST /api/v1/orders/online/settlements`: `admin`, `manager`, `cashier`
 

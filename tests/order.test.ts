@@ -5,6 +5,7 @@ describe('Order API Tests', () => {
   let adminToken: string;
   let managerToken: string;
   let orderId: string;
+  let cancellableOrderId: string;
   let menuItemId: string;
 
   beforeAll(async () => {
@@ -241,6 +242,55 @@ describe('Order API Tests', () => {
       expect(response.body.data.subtotal).toBeCloseTo(28.54, 2);
       expect(response.body.data.tax).toBeCloseTo(1.43, 2);
       expect(response.body.data.subtotal + response.body.data.tax).toBeCloseTo(response.body.data.total, 2);
+    });
+  });
+
+  describe('PATCH /api/v1/orders/:id/cancel', () => {
+    it('should cancel an active order', async () => {
+      const createResponse = await request(app)
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 1,
+            },
+          ],
+        })
+        .expect(201);
+
+      cancellableOrderId = createResponse.body.data.id;
+
+      const response = await request(app)
+        .patch(`/api/v1/orders/${cancellableOrderId}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.status).toBe('CANCELLED');
+      expect(response.body.data.taxRatePercentage).toBe(5);
+    });
+
+    it('should fail cancelling an already cancelled order', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/orders/${cancellableOrderId}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should fail processing payment for a cancelled order', async () => {
+      const response = await request(app)
+        .post(`/api/v1/orders/${cancellableOrderId}/pay`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({
+          paymentMethod: 'CARD',
+        })
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
     });
   });
 

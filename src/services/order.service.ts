@@ -340,6 +340,54 @@ export const orderService = {
     return enrichedOrder;
   },
 
+  async cancelOrder(orderId: string) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw createError.notFound('Order not found');
+    }
+
+    if (order.status === 'COMPLETED') {
+      throw createError.badRequest('Cannot cancel completed order');
+    }
+
+    if (order.status === 'CANCELLED') {
+      throw createError.badRequest('Order already cancelled');
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED' },
+      include: orderInclude,
+    });
+
+    const enrichedOrder = enrichOrderBillingResponse(updatedOrder);
+
+    if (order.tableId) {
+      const activeOrders = await prisma.order.count({
+        where: {
+          tableId: order.tableId,
+          status: {
+            in: ACTIVE_ORDER_STATUSES,
+          },
+        },
+      });
+
+      if (activeOrders === 0) {
+        await prisma.table.update({
+          where: { id: order.tableId },
+          data: { status: 'AVAILABLE' },
+        });
+      }
+    }
+
+    emitOrderUpdate('order:cancelled', enrichedOrder);
+
+    return enrichedOrder;
+  },
+
   async addOrderItems(
     orderId: string,
     items: Array<{
