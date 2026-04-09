@@ -3,11 +3,11 @@ export class AppError extends Error {
   public readonly isOperational: boolean;
 
   constructor(message: string, statusCode: number, isOperational: true) {
-    super(message);
+    super(message); // we use super in subclass(AppError is a subclass from Error class) to call parent class, otherwise it throws error.
     this.statusCode = statusCode;
     this.isOperational = isOperational;
 
-    Error.captureStackTrace(this, this.constructor);
+    Error.captureStackTrace(this, this.constructor); 
   }
 }
 
