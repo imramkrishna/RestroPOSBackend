@@ -103,6 +103,12 @@ describe('Order API Tests', () => {
       expect(response.body.data).toHaveProperty('total');
       expect(response.body.data).toHaveProperty('subtotal');
       expect(response.body.data).toHaveProperty('tax');
+      expect(response.body.data).toHaveProperty('taxRatePercentage');
+      expect(response.body.data.taxRatePercentage).toBe(5);
+      expect(response.body.data.total).toBeCloseTo(19.98, 2);
+      expect(response.body.data.subtotal).toBeCloseTo(19.03, 2);
+      expect(response.body.data.tax).toBeCloseTo(0.95, 2);
+      expect(response.body.data.subtotal + response.body.data.tax).toBeCloseTo(response.body.data.total, 2);
       expect(response.body.data.orderItems).toHaveLength(1);
       orderId = response.body.data.id;
     });
@@ -230,6 +236,11 @@ describe('Order API Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.orderItems.length).toBeGreaterThan(1);
+      expect(response.body.data.taxRatePercentage).toBe(5);
+      expect(response.body.data.total).toBeCloseTo(29.97, 2);
+      expect(response.body.data.subtotal).toBeCloseTo(28.54, 2);
+      expect(response.body.data.tax).toBeCloseTo(1.43, 2);
+      expect(response.body.data.subtotal + response.body.data.tax).toBeCloseTo(response.body.data.total, 2);
     });
   });
 

@@ -283,7 +283,36 @@ export interface OnlineDetailsInput {
   providerDeliveryFee?: number;
   providerDiscount?: number;
 }
+
+export interface OrderBilling {
+  subtotal: number; // extracted pre-tax amount
+  tax: number; // extracted tax amount
+  total: number; // tax-inclusive amount (sum of menu prices)
+  taxRatePercentage: number; // currently 5
+}
 ```
+
+## 5.6 Billing behavior change (tax-inclusive pricing)
+
+Menu prices are now treated as tax-inclusive. Backend no longer adds tax on top of menu totals.
+
+Frontend must follow these rules:
+- Do not calculate and add extra tax in frontend.
+- Use `data.total` from API as the final payable amount.
+- Display `data.subtotal` as pre-tax amount and `data.tax` as extracted tax amount.
+- Display `data.taxRatePercentage` as the tax rate label in invoice/bill UI.
+
+Current extraction logic in backend:
+- `subtotal = total / 1.05`
+- `tax = total - subtotal`
+
+Affected endpoints returning updated billing fields:
+- `POST /api/v1/orders`
+- `GET /api/v1/orders`
+- `GET /api/v1/orders/:id`
+- `PATCH /api/v1/orders/:id/status`
+- `POST /api/v1/orders/:id/items`
+- `POST /api/v1/orders/:id/pay`
 
 ## 6. Role Access
 

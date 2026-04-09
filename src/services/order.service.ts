@@ -9,7 +9,8 @@ import {
 } from '@prisma/client';
 import { emitOrderUpdate } from '../utils/socket.js';
 
-const TAX_RATE = 0.05; // 5% tax
+const TAX_RATE = 0.05; // 5% tax included in menu price
+const TAX_RATE_PERCENTAGE = TAX_RATE * 100;
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'COOKING', 'SERVED'];
 
 const orderInclude = {
@@ -98,6 +99,48 @@ const calculateExpectedPayout = (details: OnlineOrderInput): number | undefined 
   return Math.max(0, details.providerGrossAmount - commission - discount);
 };
 
+type BillingOrderItem = {
+  priceAtTime: number;
+  quantity: number;
+};
+
+const roundCurrency = (value: number): number => Number(value.toFixed(2));
+
+const calculateTaxInclusiveBreakdown = (taxInclusiveAmount: number) => {
+  const total = roundCurrency(taxInclusiveAmount);
+  const subtotal = roundCurrency(total / (1 + TAX_RATE));
+  const tax = roundCurrency(total - subtotal);
+
+  return {
+    subtotal,
+    tax,
+    total,
+  };
+};
+
+const calculateGrossFromItems = (items: BillingOrderItem[]): number => {
+  const grossAmount = items.reduce((total, item) => total + item.priceAtTime * item.quantity, 0);
+  return roundCurrency(grossAmount);
+};
+
+const enrichOrderBillingResponse = <T extends {
+  subtotal: number;
+  tax: number;
+  total: number;
+  orderItems: BillingOrderItem[];
+}>(order: T) => {
+  const grossAmount = calculateGrossFromItems(order.orderItems);
+  const { subtotal, tax, total } = calculateTaxInclusiveBreakdown(grossAmount);
+
+  return {
+    ...order,
+    subtotal,
+    tax,
+    total,
+    taxRatePercentage: TAX_RATE_PERCENTAGE,
+  };
+};
+
 export const orderService = {
   async getAllOrders(filters?: OrderListFilters) {
     const where: any = {};
@@ -133,7 +176,7 @@ export const orderService = {
       orderBy: { createdAt: 'desc' },
     });
 
-    return orders;
+    return orders.map((order) => enrichOrderBillingResponse(order));
   },
 
   async createOrder(
@@ -193,7 +236,7 @@ export const orderService = {
 
     const menuItemsMap = new Map(menuItems.map((item) => [item.id, item]));
 
-    let subtotal = 0;
+    let grossTotal = 0;
     const orderItemsData = data.items.map((item) => {
       const menuItem = menuItemsMap.get(item.menuItemId);
       if (!menuItem) {
@@ -204,7 +247,7 @@ export const orderService = {
       }
 
       const itemTotal = menuItem.price * item.quantity;
-      subtotal += itemTotal;
+      grossTotal += itemTotal;
 
       return {
         menuItemId: item.menuItemId,
@@ -215,8 +258,7 @@ export const orderService = {
       };
     });
 
-    const tax = subtotal * TAX_RATE;
-    const total = subtotal + tax;
+    const { subtotal, tax, total } = calculateTaxInclusiveBreakdown(grossTotal);
 
     const orderCreateData: any = {
       staffId,
@@ -244,6 +286,8 @@ export const orderService = {
       include: orderInclude,
     });
 
+    const enrichedOrder = enrichOrderBillingResponse(order);
+
     if (channel === 'DINE_IN' && data.tableId) {
       await prisma.table.update({
         where: { id: data.tableId },
@@ -251,9 +295,9 @@ export const orderService = {
       });
     }
 
-    emitOrderUpdate('order:created', order);
+    emitOrderUpdate('order:created', enrichedOrder);
 
-    return order;
+    return enrichedOrder;
   },
 
   async getOrderById(id: string) {
@@ -266,7 +310,7 @@ export const orderService = {
       throw createError.notFound('Order not found');
     }
 
-    return order;
+    return enrichOrderBillingResponse(order);
   },
 
   async updateOrderStatus(id: string, status: OrderStatus) {
@@ -288,10 +332,12 @@ export const orderService = {
       include: orderInclude,
     });
 
-    // Emit socket event for order status update
-    emitOrderUpdate('order:statusUpdate', updatedOrder);
+    const enrichedOrder = enrichOrderBillingResponse(updatedOrder);
 
-    return updatedOrder;
+    // Emit socket event for order status update
+    emitOrderUpdate('order:statusUpdate', enrichedOrder);
+
+    return enrichedOrder;
   },
 
   async addOrderItems(
@@ -326,15 +372,11 @@ export const orderService = {
 
     const menuItemsMap = new Map(menuItems.map((item) => [item.id, item]));
 
-    let additionalSubtotal = 0;
     const orderItemsData = items.map((item) => {
       const menuItem = menuItemsMap.get(item.menuItemId);
       if (!menuItem || !menuItem.isAvailable) {
         throw createError.badRequest('One or more items are not available');
       }
-
-      const itemTotal = menuItem.price * item.quantity;
-      additionalSubtotal += itemTotal;
 
       return {
         orderId,
@@ -350,9 +392,17 @@ export const orderService = {
       data: orderItemsData,
     });
 
-    const newSubtotal = order.subtotal + additionalSubtotal;
-    const newTax = newSubtotal * TAX_RATE;
-    const newTotal = newSubtotal + newTax;
+    const allOrderItems = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: {
+        priceAtTime: true,
+        quantity: true,
+      },
+    });
+
+    const grossTotal = calculateGrossFromItems(allOrderItems);
+    const { subtotal: newSubtotal, tax: newTax, total: newTotal } =
+      calculateTaxInclusiveBreakdown(grossTotal);
 
     const updatedOrder = await prisma.order.update({
       where: { id: orderId },
@@ -364,10 +414,12 @@ export const orderService = {
       include: orderInclude,
     });
 
-    // Emit socket event for order update
-    emitOrderUpdate('order:itemsAdded', updatedOrder);
+    const enrichedOrder = enrichOrderBillingResponse(updatedOrder);
 
-    return updatedOrder;
+    // Emit socket event for order update
+    emitOrderUpdate('order:itemsAdded', enrichedOrder);
+
+    return enrichedOrder;
   },
 
   async processPayment(orderId: string, paymentMethod: PaymentMethod) {
@@ -397,6 +449,8 @@ export const orderService = {
       include: orderInclude,
     });
 
+    const enrichedOrder = enrichOrderBillingResponse(updatedOrder);
+
     if (order.tableId) {
       const activeOrders = await prisma.order.count({
         where: {
@@ -416,9 +470,9 @@ export const orderService = {
     }
 
     // Emit socket event for payment completion
-    emitOrderUpdate('order:completed', updatedOrder);
+    emitOrderUpdate('order:completed', enrichedOrder);
 
-    return updatedOrder;
+    return enrichedOrder;
   },
 
   async getOnlineSettlementSummary(filters: {
@@ -604,8 +658,14 @@ export const orderService = {
       throw createError.internal('Failed to create settlement batch');
     }
 
+    const onlineOrdersWithTaxRate = batch.onlineOrders.map((onlineOrder) => ({
+      ...onlineOrder,
+      order: enrichOrderBillingResponse(onlineOrder.order),
+    }));
+
     return {
       ...batch,
+      onlineOrders: onlineOrdersWithTaxRate,
       discountAmount,
     };
   },
