@@ -213,6 +213,7 @@ If no pending records are found, API returns `400`.
 - `PATCH /api/v1/orders/:id/cancel`
 - `PATCH /api/v1/orders/:id/status`
 - `POST /api/v1/orders/:id/items`
+- `PATCH /api/v1/orders/:id/items/:itemId/cancel`
 - `POST /api/v1/orders/:id/pay`
 
 ### 4.6 Cancel order
@@ -249,6 +250,32 @@ Authorization: Bearer <token>
     "taxRatePercentage": 5
   }
 }
+```
+
+### 4.7 Cancel specific order item
+
+`PATCH /api/v1/orders/:id/items/:itemId/cancel`
+
+No request body is required.
+
+#### Path params
+- `id`: order UUID
+- `itemId`: order item UUID (from `orderItems[].id`)
+
+#### Behavior
+- Removes only that specific order item from the order.
+- Recalculates order billing fields: `subtotal`, `tax`, and `total`.
+- If it was the last remaining item, the order is auto-marked as `CANCELLED`.
+
+#### Socket events
+- Emits `order:itemCancelled` if order still has items.
+- Emits `order:cancelled` if last item was removed.
+
+#### Example request
+
+```http
+PATCH /api/v1/orders/550e8400-e29b-41d4-a716-446655440000/items/660e8400-e29b-41d4-a716-446655440111/cancel
+Authorization: Bearer <token>
 ```
 
 ## 5. Frontend Changes Required
@@ -370,10 +397,29 @@ await axios.patch(`/api/v1/orders/${orderId}/cancel`, undefined, {
 - Recompute table occupancy view if your UI shows live table states.
 - Show backend error message for `400` cases (already cancelled/completed).
 
+## 5.8 Frontend cancel-specific-item implementation
+
+Use this when user wants to remove one item from an order without cancelling the whole order.
+
+### Request
+
+```ts
+await axios.patch(`/api/v1/orders/${orderId}/items/${itemId}/cancel`, undefined, {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+### UI handling
+- On success, replace local order state with response `data`.
+- If `data.status === 'CANCELLED'`, treat this order as fully cancelled.
+- Handle both realtime events for sync: `order:itemCancelled` and `order:cancelled`.
+- Surface `404` for missing item/order and `400` for completed/cancelled order.
+
 ## 6. Role Access
 
 - `GET /api/v1/orders`: `admin`, `chef`, `manager`, `waiter`, `cashier`
 - `PATCH /api/v1/orders/:id/cancel`: `admin`, `chef`, `manager`, `waiter`
+- `PATCH /api/v1/orders/:id/items/:itemId/cancel`: `admin`, `chef`, `manager`, `waiter`
 - `GET /api/v1/orders/online/summary`: `admin`, `manager`, `cashier`
 - `POST /api/v1/orders/online/settlements`: `admin`, `manager`, `cashier`
 

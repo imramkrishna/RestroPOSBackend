@@ -150,6 +150,7 @@ http://localhost:3000/api/v1
 | POST | `/orders` | Create order | Authenticated |
 | GET | `/orders/:id` | Get order details | Authenticated |
 | PATCH | `/orders/:id/status` | Update order status | Chef/Waiter/Manager |
+| PATCH | `/orders/:id/items/:itemId/cancel` | Cancel specific order item | Chef/Waiter/Manager |
 | POST | `/orders/:id/items` | Add items to order | Authenticated |
 | POST | `/orders/:id/pay` | Process payment | Cashier/Manager |
 
@@ -221,6 +222,7 @@ Allowed roles: `ADMIN`, `MANAGER`, `CASHIER`
 - `order:statusUpdate` - Order status changed
 - `order:cancelled` - Order cancelled
 - `order:itemsAdded` - Items added to order
+- `order:itemCancelled` - Specific item removed from order
 - `order:completed` - Payment processed
 - `socket:error` - Room join denied due to role restrictions
 
@@ -380,6 +382,7 @@ Server -> client events:
 - `order:statusUpdate`
 - `order:cancelled`
 - `order:itemsAdded`
+- `order:itemCancelled`
 - `order:completed`
 - `socket:error` with payload:
 
@@ -561,6 +564,27 @@ No body.
 }
 ```
 
+#### PATCH `/api/v1/orders/:id/items/:itemId/cancel`
+
+No body.
+
+Path params:
+
+- `id`: order UUID
+- `itemId`: order-item UUID (use `orderItems[].id` from the order payload)
+
+Behavior:
+
+- Removes one specific item from the order.
+- Recalculates `subtotal`, `tax`, and `total` from remaining items.
+- If the cancelled item was the last item, the order is auto-marked `CANCELLED` with zero totals.
+
+Possible errors:
+
+- `404`: order not found
+- `404`: order item not found for this order
+- `400`: order is already `COMPLETED` or `CANCELLED`
+
 #### POST `/api/v1/orders/:id/pay`
 
 ```json
@@ -610,6 +634,106 @@ Optional query:
 4. Subscribe to all `order:*` events and merge payload into local state.
 5. On `connect_error` with token-related messages, call `/api/v1/auth/refresh`, reconnect with new access token.
 6. On `socket:error`, show authorization message and avoid retrying restricted room joins.
+
+### 7. Frontend Implementation: Cancel Specific Order Item
+
+Use this action in order detail screen or kitchen queue when only one line-item should be removed.
+
+#### Endpoint
+
+`PATCH /api/v1/orders/:id/items/:itemId/cancel`
+
+#### Request
+
+- Method: `PATCH`
+- Headers:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+- Body: none
+
+Example:
+
+```http
+PATCH /api/v1/orders/4f6b0ef3-6f31-41e7-99df-86f87131fb6d/items/0fc79f74-8a08-43cb-b473-c5d4fbe84b1c/cancel
+Authorization: Bearer <accessToken>
+```
+
+#### Success Response (200)
+
+Returns the full updated order object in standard envelope:
+
+```json
+{
+   "success": true,
+   "data": {
+      "id": "4f6b0ef3-6f31-41e7-99df-86f87131fb6d",
+      "status": "COOKING",
+      "subtotal": 19.03,
+      "tax": 0.95,
+      "total": 19.98,
+      "taxRatePercentage": 5,
+      "orderItems": [
+         {
+            "id": "remaining-order-item-id",
+            "menuItemId": "menu-item-id",
+            "quantity": 2,
+            "priceAtTime": 9.99
+         }
+      ]
+   }
+}
+```
+
+If the removed item was the last item, response will have:
+
+- `data.status = "CANCELLED"`
+- `data.orderItems = []`
+- `data.subtotal = 0`, `data.tax = 0`, `data.total = 0`
+
+#### Realtime Events To Handle
+
+- `order:itemCancelled`: emitted when order still has items after removal.
+- `order:cancelled`: emitted when last item removal cancels the full order.
+
+#### Frontend Handling Pattern
+
+1. Call cancel-item endpoint with order id and order-item id.
+2. Replace local order state with response `data`.
+3. Keep socket listeners for both `order:itemCancelled` and `order:cancelled` to stay in sync across tabs/screens.
+4. If order becomes `CANCELLED`, remove it from active kitchen/cashier lists.
+
+#### TypeScript Snippet
+
+```ts
+type ApiResponse<T> = {
+   success: boolean;
+   data: T;
+   message?: string;
+};
+
+async function cancelOrderItem(orderId: string, itemId: string, accessToken: string) {
+   const response = await fetch(
+      `/api/v1/orders/${orderId}/items/${itemId}/cancel`,
+      {
+         method: 'PATCH',
+         headers: {
+            Authorization: `Bearer ${accessToken}`,
+         },
+      }
+   );
+
+   const payload = (await response.json()) as ApiResponse<OrderRealtimePayload>;
+
+   if (!response.ok || !payload.success) {
+      throw new Error(payload.message ?? 'Failed to cancel order item');
+   }
+
+   return payload.data;
+}
+```
 
 ## Project Structure
 

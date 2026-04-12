@@ -68,6 +68,16 @@ export const orderController = {
     });
   }),
 
+  cancelOrderItem: asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { id, itemId } = req.params as { id: string; itemId: string };
+    const order = await orderService.cancelOrderItem(id, itemId);
+
+    res.status(200).json({
+      success: true,
+      data: order,
+    });
+  }),
+
   addOrderItems: asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { items } = req.body;

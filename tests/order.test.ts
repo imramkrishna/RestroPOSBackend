@@ -6,6 +6,7 @@ describe('Order API Tests', () => {
   let managerToken: string;
   let orderId: string;
   let cancellableOrderId: string;
+  let orderItemIdToCancel: string;
   let menuItemId: string;
 
   beforeAll(async () => {
@@ -237,11 +238,73 @@ describe('Order API Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.orderItems.length).toBeGreaterThan(1);
+      const addedItem = response.body.data.orderItems.find(
+        (item: { id: string; notes?: string }) => item.notes === 'No onions'
+      );
+      if (!addedItem) {
+        throw new Error('Added item was not found in response payload');
+      }
+      orderItemIdToCancel = addedItem.id;
       expect(response.body.data.taxRatePercentage).toBe(5);
       expect(response.body.data.total).toBeCloseTo(29.97, 2);
       expect(response.body.data.subtotal).toBeCloseTo(28.54, 2);
       expect(response.body.data.tax).toBeCloseTo(1.43, 2);
       expect(response.body.data.subtotal + response.body.data.tax).toBeCloseTo(response.body.data.total, 2);
+    });
+  });
+
+  describe('PATCH /api/v1/orders/:id/items/:itemId/cancel', () => {
+    it('should cancel a specific item from an active order', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/orders/${orderId}/items/${orderItemIdToCancel}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.orderItems.some((item: { id: string }) => item.id === orderItemIdToCancel)).toBe(false);
+      expect(response.body.data.taxRatePercentage).toBe(5);
+      expect(response.body.data.total).toBeCloseTo(19.98, 2);
+      expect(response.body.data.subtotal).toBeCloseTo(19.03, 2);
+      expect(response.body.data.tax).toBeCloseTo(0.95, 2);
+    });
+
+    it('should cancel the whole order when the last item is cancelled', async () => {
+      const createResponse = await request(app)
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 1,
+            },
+          ],
+        })
+        .expect(201);
+
+      const singleItemOrderId = createResponse.body.data.id;
+      const singleItemId = createResponse.body.data.orderItems[0].id;
+
+      const response = await request(app)
+        .patch(`/api/v1/orders/${singleItemOrderId}/items/${singleItemId}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.status).toBe('CANCELLED');
+      expect(response.body.data.orderItems).toHaveLength(0);
+      expect(response.body.data.total).toBe(0);
+      expect(response.body.data.subtotal).toBe(0);
+      expect(response.body.data.tax).toBe(0);
+    });
+
+    it('should fail when cancelling a non-existent order item', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/orders/${orderId}/items/00000000-0000-0000-0000-000000000000/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(404);
+
+      expect(response.body.success).toBe(false);
     });
   });
 

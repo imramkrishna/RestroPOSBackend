@@ -104,6 +104,13 @@ export const cancelOrderSchema = z.object({
   }),
 });
 
+export const cancelOrderItemSchema = z.object({
+  params: z.object({
+    id: z.string().uuid(),
+    itemId: z.string().uuid(),
+  }),
+});
+
 export const addOrderItemsSchema = z.object({
   body: z.object({
     items: z.array(

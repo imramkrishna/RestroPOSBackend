@@ -141,6 +141,28 @@ const enrichOrderBillingResponse = <T extends {
   };
 };
 
+const releaseTableIfNoActiveOrders = async (tableId?: string | null) => {
+  if (!tableId) {
+    return;
+  }
+
+  const activeOrders = await prisma.order.count({
+    where: {
+      tableId,
+      status: {
+        in: ACTIVE_ORDER_STATUSES,
+      },
+    },
+  });
+
+  if (activeOrders === 0) {
+    await prisma.table.update({
+      where: { id: tableId },
+      data: { status: 'AVAILABLE' },
+    });
+  }
+};
+
 export const orderService = {
   async getAllOrders(filters?: OrderListFilters) {
     const where: any = {};
@@ -365,25 +387,84 @@ export const orderService = {
 
     const enrichedOrder = enrichOrderBillingResponse(updatedOrder);
 
-    if (order.tableId) {
-      const activeOrders = await prisma.order.count({
-        where: {
-          tableId: order.tableId,
-          status: {
-            in: ACTIVE_ORDER_STATUSES,
-          },
-        },
-      });
-
-      if (activeOrders === 0) {
-        await prisma.table.update({
-          where: { id: order.tableId },
-          data: { status: 'AVAILABLE' },
-        });
-      }
-    }
+    await releaseTableIfNoActiveOrders(order.tableId);
 
     emitOrderUpdate('order:cancelled', enrichedOrder);
+
+    return enrichedOrder;
+  },
+
+  async cancelOrderItem(orderId: string, orderItemId: string) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw createError.notFound('Order not found');
+    }
+
+    if (order.status === 'COMPLETED' || order.status === 'CANCELLED') {
+      throw createError.badRequest('Cannot cancel item from completed or cancelled order');
+    }
+
+    const existingOrderItem = await prisma.orderItem.findFirst({
+      where: {
+        id: orderItemId,
+        orderId,
+      },
+    });
+
+    if (!existingOrderItem) {
+      throw createError.notFound('Order item not found for this order');
+    }
+
+    await prisma.orderItem.delete({
+      where: { id: orderItemId },
+    });
+
+    const remainingOrderItems = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: {
+        priceAtTime: true,
+        quantity: true,
+      },
+    });
+
+    if (remainingOrderItems.length === 0) {
+      const cancelledOrder = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: 'CANCELLED',
+          subtotal: 0,
+          tax: 0,
+          total: 0,
+        },
+        include: orderInclude,
+      });
+
+      const enrichedCancelledOrder = enrichOrderBillingResponse(cancelledOrder);
+      await releaseTableIfNoActiveOrders(order.tableId);
+      emitOrderUpdate('order:cancelled', enrichedCancelledOrder);
+
+      return enrichedCancelledOrder;
+    }
+
+    const grossTotal = calculateGrossFromItems(remainingOrderItems);
+    const { subtotal: newSubtotal, tax: newTax, total: newTotal } =
+      calculateTaxInclusiveBreakdown(grossTotal);
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        subtotal: newSubtotal,
+        tax: newTax,
+        total: newTotal,
+      },
+      include: orderInclude,
+    });
+
+    const enrichedOrder = enrichOrderBillingResponse(updatedOrder);
+    emitOrderUpdate('order:itemCancelled', enrichedOrder);
 
     return enrichedOrder;
   },
@@ -499,23 +580,7 @@ export const orderService = {
 
     const enrichedOrder = enrichOrderBillingResponse(updatedOrder);
 
-    if (order.tableId) {
-      const activeOrders = await prisma.order.count({
-        where: {
-          tableId: order.tableId,
-          status: {
-            in: ACTIVE_ORDER_STATUSES,
-          },
-        },
-      });
-
-      if (activeOrders === 0) {
-        await prisma.table.update({
-          where: { id: order.tableId },
-          data: { status: 'AVAILABLE' },
-        });
-      }
-    }
+    await releaseTableIfNoActiveOrders(order.tableId);
 
     // Emit socket event for payment completion
     emitOrderUpdate('order:completed', enrichedOrder);
