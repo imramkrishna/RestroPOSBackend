@@ -58,10 +58,12 @@ A comprehensive backend system for restaurant Point of Sale (POS) operations, bu
    NODE_ENV="development"
    PRISMA_QUERY_LOGS="false"
    SOCKET_DEBUG_LOGS="false"
+   SOCKET_CORS_ORIGINS="http://localhost:3000"
    ```
 
    Set `PRISMA_QUERY_LOGS="true"` only when you need SQL query debugging.
    Set `SOCKET_DEBUG_LOGS="true"` when you want connection/join/disconnect socket logs.
+   Set `SOCKET_CORS_ORIGINS` as comma-separated origins for allowed Socket.IO clients.
 
 4. **Set up the database**
    ```bash
@@ -190,23 +192,424 @@ http://localhost:3000/api/v1
 
 ## Socket.IO Events
 
-Connect to `http://localhost:3000` and join rooms:
+Connect to `http://localhost:3000` with the JWT access token from `/api/v1/auth/login`:
+
+```javascript
+const socket = io('http://localhost:3000', {
+   auth: { token: accessToken },
+});
+```
+
+Then join rooms:
 
 ### Kitchen Room
 ```javascript
 socket.emit('join:kitchen');
 ```
 
+Allowed roles: `ADMIN`, `MANAGER`, `CHEF`
+
 ### Cashier Room
 ```javascript
 socket.emit('join:cashier');
 ```
 
+Allowed roles: `ADMIN`, `MANAGER`, `CASHIER`
+
 ### Events Emitted
 - `order:created` - New order created
 - `order:statusUpdate` - Order status changed
+- `order:cancelled` - Order cancelled
 - `order:itemsAdded` - Items added to order
 - `order:completed` - Payment processed
+- `socket:error` - Room join denied due to role restrictions
+
+## Frontend Integration Contract
+
+Use this section as the implementation reference for frontend API and Socket.IO integration.
+
+### 1. Response Envelope
+
+Success response:
+
+```json
+{
+   "success": true,
+   "data": {}
+}
+```
+
+Error response:
+
+```json
+{
+   "success": false,
+   "message": "Error message"
+}
+```
+
+Validation errors are returned as a JSON-stringified array inside `message`.
+
+Example:
+
+```json
+{
+   "success": false,
+   "message": "[{\"field\":\"body.items.0.quantity\",\"message\":\"Number must be greater than 0\"}]"
+}
+```
+
+### 2. Authentication API
+
+#### POST `/api/v1/auth/login`
+
+Request:
+
+```json
+{
+   "username": "admin",
+   "password": "admin123"
+}
+```
+
+Response:
+
+```json
+{
+   "success": true,
+   "data": {
+      "accessToken": "jwt-access-token",
+      "refreshToken": "jwt-refresh-token",
+      "user": {
+         "id": "uuid",
+         "username": "admin",
+         "role": "ADMIN",
+         "createdAt": "2026-04-10T00:00:00.000Z",
+         "updatedAt": "2026-04-10T00:00:00.000Z",
+         "profile": {
+            "id": "uuid",
+            "userId": "uuid",
+            "fullName": "Admin User",
+            "phone": "9800000000",
+            "avatarUrl": null,
+            "status": "ACTIVE",
+            "shiftStart": null,
+            "shiftEnd": null,
+            "createdAt": "2026-04-10T00:00:00.000Z",
+            "updatedAt": "2026-04-10T00:00:00.000Z"
+         }
+      }
+   }
+}
+```
+
+#### POST `/api/v1/auth/refresh`
+
+Request:
+
+```json
+{
+   "refreshToken": "jwt-refresh-token"
+}
+```
+
+Response:
+
+```json
+{
+   "success": true,
+   "data": {
+      "accessToken": "new-jwt-access-token"
+   }
+}
+```
+
+#### GET `/api/v1/auth/me`
+
+Header:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Response:
+
+```json
+{
+   "success": true,
+   "data": {
+      "id": "uuid",
+      "username": "admin",
+      "role": "ADMIN",
+      "createdAt": "2026-04-10T00:00:00.000Z",
+      "profile": {
+         "id": "uuid",
+         "fullName": "Admin User",
+         "status": "ACTIVE"
+      }
+   }
+}
+```
+
+### 3. Socket.IO Frontend Contract
+
+Connect with JWT access token:
+
+```javascript
+const socket = io('http://localhost:3000', {
+   auth: { token: accessToken },
+   withCredentials: true,
+});
+```
+
+Possible `connect_error.message` values:
+
+- `Unauthorized: missing access token`
+- `Unauthorized: access token expired`
+- `Unauthorized: invalid access token`
+- `Origin not allowed by Socket.IO CORS`
+
+Client -> server events:
+
+- `join:kitchen` (payload: none)
+- `join:cashier` (payload: none)
+
+Server -> client events:
+
+- `order:created`
+- `order:statusUpdate`
+- `order:cancelled`
+- `order:itemsAdded`
+- `order:completed`
+- `socket:error` with payload:
+
+```json
+{
+   "message": "Forbidden: kitchen room access denied"
+}
+```
+
+### 4. Realtime Order Payload Shape
+
+All order events (`order:*`) emit the same payload shape:
+
+```ts
+type UserRole = 'ADMIN' | 'MANAGER' | 'CASHIER' | 'CHEF' | 'WAITER';
+type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
+type OrderStatus = 'PENDING' | 'COOKING' | 'SERVED' | 'COMPLETED' | 'CANCELLED';
+type PaymentMethod = 'CASH' | 'CARD' | 'UPI' | 'OTHER' | null;
+type OrderChannel = 'DINE_IN' | 'TAKEAWAY' | 'ONLINE';
+type DeliveryProvider = 'PATHAO_FOOD' | 'FOOD_MANDU' | 'OTHER';
+type SettlementStatus = 'PENDING' | 'SETTLED' | 'DISPUTED';
+
+type OrderRealtimePayload = {
+   id: string;
+   tableId: string | null;
+   staffId: string;
+   channel: OrderChannel;
+   status: OrderStatus;
+   subtotal: number;
+   tax: number;
+   total: number;
+   taxRatePercentage: number;
+   paymentMethod: PaymentMethod;
+   createdAt: string;
+   updatedAt: string;
+   table: {
+      id: string;
+      tableNumber: string;
+      capacity: number;
+      status: TableStatus;
+      createdAt: string;
+      updatedAt: string;
+   } | null;
+   staff: {
+      id: string;
+      username: string;
+      role: UserRole;
+   };
+   orderItems: Array<{
+      id: string;
+      orderId: string;
+      menuItemId: string;
+      quantity: number;
+      variant: string | null;
+      priceAtTime: number;
+      notes: string | null;
+      createdAt: string;
+      menuItem: {
+         id: string;
+         categoryId: string;
+         name: string;
+         description: string | null;
+         price: number;
+         imageUrl: string | null;
+         isAvailable: boolean;
+         sizes: unknown | null;
+         createdAt: string;
+         updatedAt: string;
+      };
+   }>;
+   onlineDetails: {
+      id: string;
+      orderId: string;
+      provider: DeliveryProvider;
+      externalOrderId: string | null;
+      customerName: string;
+      customerPhone: string;
+      deliveryAddress: string;
+      deliveryInstructions: string | null;
+      providerGrossAmount: number | null;
+      providerCommission: number | null;
+      providerDeliveryFee: number | null;
+      providerDiscount: number | null;
+      expectedPayout: number | null;
+      settlementStatus: SettlementStatus;
+      settledAt: string | null;
+      settlementBatchId: string | null;
+      createdAt: string;
+      updatedAt: string;
+      settlementBatch: {
+         id: string;
+         provider: DeliveryProvider;
+         weekStart: string;
+         weekEnd: string;
+         orderCount: number;
+         grossAmount: number;
+         commissionAmount: number;
+         netAmount: number;
+         notes: string | null;
+         settledAt: string;
+         createdAt: string;
+         updatedAt: string;
+      } | null;
+   } | null;
+};
+```
+
+### 5. Order API Payloads
+
+#### POST `/api/v1/orders`
+
+Example DINE_IN request:
+
+```json
+{
+   "channel": "DINE_IN",
+   "tableId": "uuid",
+   "items": [
+      {
+         "menuItemId": "uuid",
+         "quantity": 2,
+         "variant": "Large",
+         "notes": "Less spicy"
+      }
+   ]
+}
+```
+
+Example ONLINE request:
+
+```json
+{
+   "channel": "ONLINE",
+   "items": [
+      {
+         "menuItemId": "uuid",
+         "quantity": 1
+      }
+   ],
+   "onlineDetails": {
+      "provider": "PATHAO_FOOD",
+      "externalOrderId": "PX-1001",
+      "customerName": "Ram",
+      "customerPhone": "9800000000",
+      "deliveryAddress": "Kathmandu",
+      "deliveryInstructions": "Leave at gate",
+      "providerGrossAmount": 1500,
+      "providerCommission": 180,
+      "providerDeliveryFee": 120,
+      "providerDiscount": 50
+   }
+}
+```
+
+#### PATCH `/api/v1/orders/:id/status`
+
+```json
+{
+   "status": "COOKING"
+}
+```
+
+#### PATCH `/api/v1/orders/:id/cancel`
+
+No body.
+
+#### POST `/api/v1/orders/:id/items`
+
+```json
+{
+   "items": [
+      {
+         "menuItemId": "uuid",
+         "quantity": 1,
+         "variant": "Medium",
+         "notes": "No onion"
+      }
+   ]
+}
+```
+
+#### POST `/api/v1/orders/:id/pay`
+
+```json
+{
+   "paymentMethod": "CARD"
+}
+```
+
+#### GET `/api/v1/orders`
+
+Optional query params:
+
+- `status`: `PENDING | COOKING | SERVED | COMPLETED | CANCELLED`
+- `channel`: `DINE_IN | TAKEAWAY | ONLINE`
+- `provider`: `PATHAO_FOOD | FOOD_MANDU | OTHER`
+- `settlementStatus`: `PENDING | SETTLED | DISPUTED`
+- `weekStart`: `YYYY-MM-DD` (must be used with `weekEnd`)
+- `weekEnd`: `YYYY-MM-DD` (must be used with `weekStart`)
+
+#### GET `/api/v1/orders/online/summary`
+
+Required query:
+
+- `weekStart`: `YYYY-MM-DD`
+- `weekEnd`: `YYYY-MM-DD`
+
+Optional query:
+
+- `provider`: `PATHAO_FOOD | FOOD_MANDU | OTHER`
+
+#### POST `/api/v1/orders/online/settlements`
+
+```json
+{
+   "provider": "PATHAO_FOOD",
+   "weekStart": "2026-04-01",
+   "weekEnd": "2026-04-07",
+   "notes": "Weekly settlement"
+}
+```
+
+### 6. Frontend Implementation Flow
+
+1. Login and store `accessToken` + `refreshToken`.
+2. Initialize Socket.IO with `auth.token = accessToken`.
+3. On socket `connect`, emit `join:kitchen` or `join:cashier` based on role.
+4. Subscribe to all `order:*` events and merge payload into local state.
+5. On `connect_error` with token-related messages, call `/api/v1/auth/refresh`, reconnect with new access token.
+6. On `socket:error`, show authorization message and avoid retrying restricted room joins.
 
 ## Project Structure
 

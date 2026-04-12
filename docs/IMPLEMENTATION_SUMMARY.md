@@ -471,19 +471,26 @@ All routes and functionality from BACKEND_SPECS.md have been fully implemented!
 
 - **Server URL:** `http://localhost:<PORT>`
 - **Socket path:** default Socket.IO path (`/socket.io`)
-- **Auth:** no socket-level auth handshake is currently implemented
+- **Auth:** JWT access token is required in Socket.IO handshake (`auth.token` or `Authorization: Bearer <token>`)
+- **CORS origins:** controlled by `SOCKET_CORS_ORIGINS` (comma-separated)
 
 ### Client → Server Events (2)
 
 #### 1. `join:kitchen`
 **Payload:** none
 **Description:** Joins the `kitchen` room to receive kitchen-relevant order events.
+**Allowed roles:** `ADMIN`, `MANAGER`, `CHEF`
 
 #### 2. `join:cashier`
 **Payload:** none
 **Description:** Joins the `cashier` room to receive billing/payment-relevant order events.
+**Allowed roles:** `ADMIN`, `MANAGER`, `CASHIER`
 
-### Server → Client Events (4)
+#### 3. `socket:error`
+**Payload:** `{ message: string }`
+**Description:** Sent when a client is authenticated but not authorized to join the requested room.
+
+### Server → Client Events (5)
 
 All order events are emitted to both `kitchen` and `cashier` rooms.
 
@@ -496,7 +503,10 @@ All order events are emitted to both `kitchen` and `cashier` rooms.
 #### 3. `order:itemsAdded`
 **Payload:** updated order object after adding items and recalculating totals
 
-#### 4. `order:completed`
+#### 4. `order:cancelled`
+**Payload:** updated order object after cancellation
+
+#### 5. `order:completed`
 **Payload:** updated order object after payment completion
 
 ### Example Event Payload Shape
