@@ -12,6 +12,7 @@ import { emitOrderUpdate } from '../utils/socket.js';
 const TAX_RATE = 0.05; // 5% tax included in menu price
 const TAX_RATE_PERCENTAGE = TAX_RATE * 100;
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'COOKING', 'SERVED'];
+const KITCHEN_LOCKED_STATUSES: OrderStatus[] = ['COOKING', 'SERVED'];
 
 const orderInclude = {
   table: true,
@@ -160,6 +161,37 @@ const releaseTableIfNoActiveOrders = async (tableId?: string | null) => {
       where: { id: tableId },
       data: { status: 'AVAILABLE' },
     });
+  }
+};
+
+const ensureOrderCancellable = (status: OrderStatus, target: 'order' | 'order item') => {
+  if (KITCHEN_LOCKED_STATUSES.includes(status)) {
+    const subject = target === 'order' ? 'order' : 'order item';
+    throw createError.badRequest(
+      `Cannot cancel ${subject} while kitchen status is ${status}`
+    );
+  }
+
+  if (status === 'COMPLETED') {
+    throw createError.badRequest(
+      target === 'order'
+        ? 'Cannot cancel completed order'
+        : 'Cannot cancel order item from completed order'
+    );
+  }
+
+  if (status === 'CANCELLED') {
+    throw createError.badRequest(
+      target === 'order'
+        ? 'Order already cancelled'
+        : 'Cannot cancel order item from cancelled order'
+    );
+  }
+
+  if (status !== 'PENDING') {
+    throw createError.badRequest(
+      `Cannot cancel ${target} in ${status} state; only PENDING orders can be cancelled`
+    );
   }
 };
 
@@ -371,13 +403,7 @@ export const orderService = {
       throw createError.notFound('Order not found');
     }
 
-    if (order.status === 'COMPLETED') {
-      throw createError.badRequest('Cannot cancel completed order');
-    }
-
-    if (order.status === 'CANCELLED') {
-      throw createError.badRequest('Order already cancelled');
-    }
+    ensureOrderCancellable(order.status, 'order');
 
     const updatedOrder = await prisma.order.update({
       where: { id: orderId },
@@ -403,9 +429,7 @@ export const orderService = {
       throw createError.notFound('Order not found');
     }
 
-    if (order.status === 'COMPLETED' || order.status === 'CANCELLED') {
-      throw createError.badRequest('Cannot cancel item from completed or cancelled order');
-    }
+    ensureOrderCancellable(order.status, 'order item');
 
     const existingOrderItem = await prisma.orderItem.findFirst({
       where: {

@@ -6,7 +6,6 @@ describe('Order API Tests', () => {
   let managerToken: string;
   let orderId: string;
   let cancellableOrderId: string;
-  let orderItemIdToCancel: string;
   let menuItemId: string;
 
   beforeAll(async () => {
@@ -238,13 +237,6 @@ describe('Order API Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.orderItems.length).toBeGreaterThan(1);
-      const addedItem = response.body.data.orderItems.find(
-        (item: { id: string; notes?: string }) => item.notes === 'No onions'
-      );
-      if (!addedItem) {
-        throw new Error('Added item was not found in response payload');
-      }
-      orderItemIdToCancel = addedItem.id;
       expect(response.body.data.taxRatePercentage).toBe(5);
       expect(response.body.data.total).toBeCloseTo(29.97, 2);
       expect(response.body.data.subtotal).toBeCloseTo(28.54, 2);
@@ -254,18 +246,122 @@ describe('Order API Tests', () => {
   });
 
   describe('PATCH /api/v1/orders/:id/items/:itemId/cancel', () => {
-    it('should cancel a specific item from an active order', async () => {
+    it('should cancel a specific item from a pending order', async () => {
+      const createResponse = await request(app)
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 2,
+              notes: 'Base line',
+            },
+          ],
+        })
+        .expect(201);
+
+      const pendingOrderId = createResponse.body.data.id;
+
+      const addItemResponse = await request(app)
+        .post(`/api/v1/orders/${pendingOrderId}/items`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 1,
+              notes: 'Item to cancel',
+            },
+          ],
+        })
+        .expect(200);
+
+      const itemToCancel = addItemResponse.body.data.orderItems.find(
+        (item: { id: string; notes?: string }) => item.notes === 'Item to cancel'
+      );
+
+      if (!itemToCancel) {
+        throw new Error('Unable to find order item to cancel in test fixture');
+      }
+
+      const itemIdToCancel = itemToCancel.id;
+
       const response = await request(app)
-        .patch(`/api/v1/orders/${orderId}/items/${orderItemIdToCancel}/cancel`)
+        .patch(`/api/v1/orders/${pendingOrderId}/items/${itemIdToCancel}/cancel`)
         .set('Authorization', `Bearer ${managerToken}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.data.orderItems.some((item: { id: string }) => item.id === orderItemIdToCancel)).toBe(false);
+      expect(response.body.data.orderItems.some((item: { id: string }) => item.id === itemIdToCancel)).toBe(false);
       expect(response.body.data.taxRatePercentage).toBe(5);
       expect(response.body.data.total).toBeCloseTo(19.98, 2);
       expect(response.body.data.subtotal).toBeCloseTo(19.03, 2);
       expect(response.body.data.tax).toBeCloseTo(0.95, 2);
+    });
+
+    it('should fail cancelling a specific item when order is COOKING', async () => {
+      const createResponse = await request(app)
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 1,
+            },
+          ],
+        })
+        .expect(201);
+
+      const cookingOrderId = createResponse.body.data.id;
+      const cookingOrderItemId = createResponse.body.data.orderItems[0].id;
+
+      await request(app)
+        .patch(`/api/v1/orders/${cookingOrderId}/status`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ status: 'COOKING' })
+        .expect(200);
+
+      const response = await request(app)
+        .patch(`/api/v1/orders/${cookingOrderId}/items/${cookingOrderItemId}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toContain('kitchen status is COOKING');
+    });
+
+    it('should fail cancelling a specific item when order is SERVED', async () => {
+      const createResponse = await request(app)
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 1,
+            },
+          ],
+        })
+        .expect(201);
+
+      const servedOrderId = createResponse.body.data.id;
+      const servedOrderItemId = createResponse.body.data.orderItems[0].id;
+
+      await request(app)
+        .patch(`/api/v1/orders/${servedOrderId}/status`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ status: 'SERVED' })
+        .expect(200);
+
+      const response = await request(app)
+        .patch(`/api/v1/orders/${servedOrderId}/items/${servedOrderItemId}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toContain('kitchen status is SERVED');
     });
 
     it('should cancel the whole order when the last item is cancelled', async () => {
@@ -299,8 +395,23 @@ describe('Order API Tests', () => {
     });
 
     it('should fail when cancelling a non-existent order item', async () => {
+      const createResponse = await request(app)
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 1,
+            },
+          ],
+        })
+        .expect(201);
+
+      const pendingOrderId = createResponse.body.data.id;
+
       const response = await request(app)
-        .patch(`/api/v1/orders/${orderId}/items/00000000-0000-0000-0000-000000000000/cancel`)
+        .patch(`/api/v1/orders/${pendingOrderId}/items/00000000-0000-0000-0000-000000000000/cancel`)
         .set('Authorization', `Bearer ${managerToken}`)
         .expect(404);
 
@@ -309,6 +420,47 @@ describe('Order API Tests', () => {
   });
 
   describe('PATCH /api/v1/orders/:id/cancel', () => {
+    it('should fail cancelling a COOKING order', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/orders/${orderId}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toContain('kitchen status is COOKING');
+    });
+
+    it('should fail cancelling a SERVED order', async () => {
+      const createResponse = await request(app)
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          items: [
+            {
+              menuItemId,
+              quantity: 1,
+            },
+          ],
+        })
+        .expect(201);
+
+      const servedOrderId = createResponse.body.data.id;
+
+      await request(app)
+        .patch(`/api/v1/orders/${servedOrderId}/status`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ status: 'SERVED' })
+        .expect(200);
+
+      const response = await request(app)
+        .patch(`/api/v1/orders/${servedOrderId}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toContain('kitchen status is SERVED');
+    });
+
     it('should cancel an active order', async () => {
       const createResponse = await request(app)
         .post('/api/v1/orders')

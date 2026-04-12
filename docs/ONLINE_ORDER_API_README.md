@@ -223,9 +223,9 @@ If no pending records are found, API returns `400`.
 No request body is required.
 
 #### Behavior
-- Cancels an active order by setting status to `CANCELLED`.
-- Fails with `400` if order is already `CANCELLED`.
-- Fails with `400` if order is already `COMPLETED`.
+- Cancels only a `PENDING` order by setting status to `CANCELLED`.
+- Fails with `400` if order is in `COOKING`, `SERVED`, `COMPLETED`, or `CANCELLED` state.
+- `COOKING` and `SERVED` are treated as kitchen-locked states and cannot be cancelled.
 - If it is a dine-in order and no other active orders remain for that table,
   table status is set to `AVAILABLE`.
 
@@ -264,6 +264,8 @@ No request body is required.
 
 #### Behavior
 - Removes only that specific order item from the order.
+- Allowed only when the parent order status is `PENDING`.
+- Item cancellation is blocked when kitchen status is `COOKING` or `SERVED`.
 - Recalculates order billing fields: `subtotal`, `tax`, and `total`.
 - If it was the last remaining item, the order is auto-marked as `CANCELLED`.
 
@@ -395,7 +397,7 @@ await axios.patch(`/api/v1/orders/${orderId}/cancel`, undefined, {
 - On success: update local order status to `CANCELLED`.
 - Disable `Add Items`, `Pay`, and `Cancel` actions for that order.
 - Recompute table occupancy view if your UI shows live table states.
-- Show backend error message for `400` cases (already cancelled/completed).
+- Show backend error message for `400` cases (`COOKING`, `SERVED`, `COMPLETED`, or already `CANCELLED`).
 
 ## 5.8 Frontend cancel-specific-item implementation
 
@@ -413,7 +415,7 @@ await axios.patch(`/api/v1/orders/${orderId}/items/${itemId}/cancel`, undefined,
 - On success, replace local order state with response `data`.
 - If `data.status === 'CANCELLED'`, treat this order as fully cancelled.
 - Handle both realtime events for sync: `order:itemCancelled` and `order:cancelled`.
-- Surface `404` for missing item/order and `400` for completed/cancelled order.
+- Surface `404` for missing item/order and `400` when order is not `PENDING`.
 
 ## 6. Role Access
 

@@ -576,6 +576,8 @@ Path params:
 Behavior:
 
 - Removes one specific item from the order.
+- Allowed only when the parent order status is `PENDING`.
+- Item cancellation is blocked when kitchen status is `COOKING` or `SERVED`.
 - Recalculates `subtotal`, `tax`, and `total` from remaining items.
 - If the cancelled item was the last item, the order is auto-marked `CANCELLED` with zero totals.
 
@@ -583,7 +585,7 @@ Possible errors:
 
 - `404`: order not found
 - `404`: order item not found for this order
-- `400`: order is already `COMPLETED` or `CANCELLED`
+- `400`: order status is not `PENDING` (`COOKING`, `SERVED`, `COMPLETED`, or `CANCELLED`)
 
 #### POST `/api/v1/orders/:id/pay`
 
@@ -670,7 +672,7 @@ Returns the full updated order object in standard envelope:
    "success": true,
    "data": {
       "id": "4f6b0ef3-6f31-41e7-99df-86f87131fb6d",
-      "status": "COOKING",
+      "status": "PENDING",
       "subtotal": 19.03,
       "tax": 0.95,
       "total": 19.98,
